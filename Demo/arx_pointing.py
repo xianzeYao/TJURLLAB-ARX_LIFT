@@ -154,6 +154,7 @@ def predict_point_from_rgb(
         seed=seed,
     )
     generated = resp.choices[0].message.content
+    print("模型输出:", generated)
     points = omni_decode_points(generated)
     if not points:
         raise RuntimeError(f"未解析到坐标，模型输出: {generated}")
@@ -185,7 +186,7 @@ def predict_multi_points_from_rgb(
     max_tokens: int = 512,
 ) -> List[Tuple[float, float]]:
     """
-    发送单张图像到 vLLM/OpenAI 兼容接口，返回首个像素点坐标 (u, v)。
+    发送单张图像到 vLLM/OpenAI 兼容接口，返回像素点坐标列表。
 
     参数:
         image: HxWx3 图像数组 (RGB 或 BGR)。
@@ -227,19 +228,21 @@ def predict_multi_points_from_rgb(
     if not points:
         raise RuntimeError(f"未解析到坐标，模型输出: {generated}")
 
-    pt = []
-    i = 0
-    while (points[i]):
-        pt.append(np.array(points[i], dtype=np.float64).reshape(-1))
-        if pt.shape[0] < 2:
-            raise RuntimeError(f"坐标维度异常: {pt}")
+    result: List[Tuple[float, float]] = []
+    for p in points:
+        arr = np.array(p, dtype=np.float64).reshape(-1)
+        if arr.shape[0] < 2:
+            raise RuntimeError(f"坐标维度异常: {arr}")
 
-        if norm_range and np.max(np.abs(pt)) <= norm_range:
-            pt = pt / norm_range * np.array([w, h], dtype=np.float64)
+        if norm_range and np.max(np.abs(arr)) <= norm_range:
+            arr = arr / norm_range * np.array([w, h], dtype=np.float64)
 
-        pt[0] = float(np.clip(pt[0], 0, w - 1))
-        pt[1] = float(np.clip(pt[1], 0, h - 1))
-        i += 1
-    return pt
+        u = float(np.clip(arr[0], 0, w - 1))
+        v = float(np.clip(arr[1], 0, h - 1))
+        result.append((u, v))
 
-__all__ = ["predict_point_from_rgb", "omni_decode_points"]
+    return result
+
+
+__all__ = ["predict_point_from_rgb",
+           "predict_multi_points_from_rgb", "omni_decode_points"]

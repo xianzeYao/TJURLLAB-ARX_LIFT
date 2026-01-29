@@ -120,7 +120,7 @@ def make_place_stop_action(pt_ref: Optional[np.ndarray]) -> Dict[str, np.ndarray
     base = np.zeros(3, dtype=np.float32) if pt_ref is None else pt_ref
     return {
         "left": np.array(
-            [base[0] - GRIPPER_OFFSET - 0.05, base[1],
+            [base[0] - GRIPPER_OFFSET - 0.06, base[1],
              base[2] + Z_CUP, 0, 0, 0, OPEN],
             dtype=np.float32,
         ),

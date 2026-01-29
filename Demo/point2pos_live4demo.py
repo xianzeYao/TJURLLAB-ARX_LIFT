@@ -59,7 +59,6 @@ class FrameBuffer(Node):
 
     def _on_color(self, msg: Image):
         img = self.bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
-        img = img[:, :, ::-1]  # BGR to RGB
         with self.lock:
             self.latest_color = img
 
@@ -127,7 +126,6 @@ def main():
             disp = color.copy()
             if clicked is not None:
                 cv2.circle(disp, clicked, 5, (0, 0, 255), -1)
-            disp = disp[:, :, ::-1]
             cv2.imshow(win, disp)
             key = cv2.waitKey(1) & 0xFF
             if key in (27, ord("q")):  # ESC or q to quit
@@ -268,7 +266,6 @@ def main():
                 for idx, line in enumerate(prompt_lines):
                     cv2.putText(disp, line, (10, 25 + idx * 25),
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2, cv2.LINE_AA)
-                disp = disp[:, :, ::-1]
                 cv2.imshow(win, disp)
                 key = cv2.waitKey(1) & 0xFF
                 # r 键刷新预测
