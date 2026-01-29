@@ -97,7 +97,7 @@ def main():
                       img_size=(640, 480))
     time.sleep(1.0)  # 等待环境初始化完成
     arx.reset()
-    arx.step_lift(14.0)
+    arx.step_lift(17.0)
     if args.debug:
         window_node = FrameBuffer()
         K = load_intrinsics()
@@ -149,8 +149,8 @@ def main():
         predicted_px = None
         executed = False
         attachment_uvs = None
-        pick_prompt = "A near cup whose base is not directly resting on a white round coaster"
-        place_prompt = "A small black dot located at the center of a white round coaster."
+        pick_prompt = "a center position to grasp the highest and leftmost cup"
+        place_prompt = "the small black dot at the center of a white round coaster that is farthest from the camera"
         try:
             win = "point2pos_predict"
             cv2.namedWindow(win, cv2.WINDOW_NORMAL)
@@ -166,6 +166,8 @@ def main():
                     continue
 
                 if predicted_px is None:
+                    if i != 0:
+                        arx.step_lift(14.0)
                     if i % 2 == 0:
                         prompt = pick_prompt
                         u, v = predict_point_from_rgb(

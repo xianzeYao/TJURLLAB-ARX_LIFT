@@ -99,7 +99,8 @@ class ARXRobotEnv():
         Returns:
             observation (Dict[str, np.ndarray]): The initial state of the robot.
         """
-
+        # 1. Lift the base to a safe height
+        self.step_lift(0.0)
         # 2. Go to the initial pose
         success, error_message = self._go_to_initial_pose()
         if not success:
