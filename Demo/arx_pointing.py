@@ -154,7 +154,6 @@ def predict_point_from_rgb(
         seed=seed,
     )
     generated = resp.choices[0].message.content
-    print("模型输出:", generated)
     points = omni_decode_points(generated)
     if not points:
         raise RuntimeError(f"未解析到坐标，模型输出: {generated}")

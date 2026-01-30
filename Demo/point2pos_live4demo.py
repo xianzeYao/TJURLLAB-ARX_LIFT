@@ -149,8 +149,8 @@ def main():
         predicted_px = None
         executed = False
         attachment_uvs = None
-        pick_prompt = "a center position to grasp the highest and leftmost cup"
-        place_prompt = "the small black dot at the center of a white round coaster that is farthest from the camera"
+        pick_prompt = "a middle and center position of the highest cup"
+        place_prompt = "the smaller black dot at the center of a white round coaster"
         try:
             win = "point2pos_predict"
             cv2.namedWindow(win, cv2.WINDOW_NORMAL)
