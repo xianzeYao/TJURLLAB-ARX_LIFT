@@ -1,7 +1,7 @@
 """
-将 2D 像素点 + 对齐深度转换为基坐标系下的 6 维末端姿态。
+将 2D 像素点 + 对齐深度转换为基坐标系下的 6 维末端姿态。（部分做clip）
 
-默认使用右手高位相机的标定文件：
+默认使用的相机的标定文件：
 - 内参: instrics_right4camerah.json
 - 外参: final_extrinsics_cam_h_right.json (T_cam2ref)
 """
@@ -18,8 +18,10 @@ DEFAULT_INTRINSICS = WORKSPACE / "ARX_Realenv/Tools/instrinsics_camerah.json"
 DEFAULT_EXTRINSICS = WORKSPACE / \
     "ARX_Realenv/Tools/new_extrinsics_cam_h_left.json"
 
+BIAS_REF2CAM = np.array([0.25, 0.24, 0.0, 0.0])
 
-def _depth_to_meters(raw_depth: float) -> float:
+
+def depth_to_meters(raw_depth: float) -> float:
     """将深度值转换为米单位，兼容毫米与米输入。"""
     if not np.isfinite(raw_depth) or raw_depth <= 0:
         raise ValueError(f"无效深度值: {raw_depth}")
@@ -28,7 +30,7 @@ def _depth_to_meters(raw_depth: float) -> float:
     return float(raw_depth)
 
 
-def _load_intrinsics(path: Path | str | None = None) -> np.ndarray:
+def load_intrinsics(path: Path | str | None = None) -> np.ndarray:
     """读取 3x3 相机内参矩阵。"""
     intr_path = Path(path) if path else DEFAULT_INTRINSICS
     data = json.loads(intr_path.read_text())
@@ -38,7 +40,7 @@ def _load_intrinsics(path: Path | str | None = None) -> np.ndarray:
     return K
 
 
-def _load_cam2ref(path: Path | str | None = None) -> np.ndarray:
+def load_cam2ref(path: Path | str | None = None) -> np.ndarray:
     """读取 4x4 齐次矩阵 T_cam2ref。"""
     ext_path = Path(path) if path else DEFAULT_EXTRINSICS
     payload = json.loads(ext_path.read_text())
@@ -46,21 +48,6 @@ def _load_cam2ref(path: Path | str | None = None) -> np.ndarray:
     if T.shape != (4, 4):
         raise ValueError(f"外参矩阵形状异常: {T.shape}")
     return T
-
-
-def load_intrinsics(path: Path | str | None = None) -> np.ndarray:
-    """公开版内参读取，默认读取右手高位相机参数。"""
-    return _load_intrinsics(path)
-
-
-def load_cam2ref(path: Path | str | None = None) -> np.ndarray:
-    """公开版外参读取，默认读取右手高位相机 T_cam2ref。"""
-    return _load_cam2ref(path)
-
-
-def depth_to_meters(raw_depth: float) -> float:
-    """公开版深度单位转换，兼容 mm / m。"""
-    return _depth_to_meters(raw_depth)
 
 
 def pixel_to_ref_point(
@@ -74,7 +61,7 @@ def pixel_to_ref_point(
     H, W = depth_image.shape
     if not (0 <= u < W and 0 <= v < H):
         raise ValueError(f"像素越界: {(u, v)} not in [0,{W})x[0,{H})")
-    z = _depth_to_meters(float(depth_image[v, u]))
+    z = depth_to_meters(float(depth_image[v, u]))
     fx, fy, cx, cy = K[0, 0], K[1, 1], K[0, 2], K[1, 2]
     x_cam = (u - cx) * z / fx
     y_cam = (v - cy) * z / fy
@@ -82,10 +69,29 @@ def pixel_to_ref_point(
     ref_point = T_cam2ref @ cam_point
     return ref_point[:3]
 
+def pixel_to_base_point(
+    pixel: Tuple[int, int],
+    depth_image: np.ndarray,
+    K: np.ndarray,
+    T_cam2ref: np.ndarray,
+) -> np.ndarray:
+    """像素 + 深度 -> 基坐标系 3D 点。"""
+    u, v = pixel
+    H, W = depth_image.shape
+    if not (0 <= u < W and 0 <= v < H):
+        raise ValueError(f"像素越界: {(u, v)} not in [0,{W})x[0,{H})")
+    z = depth_to_meters(float(depth_image[v, u]))
+    fx, fy, cx, cy = K[0, 0], K[1, 1], K[0, 2], K[1, 2]
+    x_cam = (u - cx) * z / fx
+    y_cam = (v - cy) * z / fy
+    cam_point = np.array([x_cam, y_cam, z, 1.0], dtype=np.float64)
+    base_point = T_cam2ref @ cam_point + BIAS_REF2CAM
+    return base_point[:2]
 
 __all__ = [
     "load_intrinsics",
     "load_cam2ref",
     "depth_to_meters",
     "pixel_to_ref_point",
+    "pixel_to_base_point",
 ]

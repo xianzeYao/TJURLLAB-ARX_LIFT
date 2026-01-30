@@ -280,6 +280,7 @@ Return the result in JSON format as:
                 print("Key 'q' pressed! Emergency stop!")
                 self.running = False
                 self.stop()
+                self.arx.close()
                 break
 
     

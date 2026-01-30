@@ -10,6 +10,7 @@ import math
 
 def main():
     arx_nav_robot = AutoNav_Robot()
+    time.sleep(1.0)
     try:
         # go
         # -- get cup start --
@@ -19,8 +20,8 @@ def main():
         pt_ref = None
         pick_prompt = "the highest cup"
         color, depth = arx_nav_robot.get_color_depth()
-        if color is None or depth is None:
-            print("Failed to get color or depth image.")
+        # if color is None or depth is None:
+        #     print("Failed to get color or depth image.")
         u, v = predict_point_from_rgb(
             color,
             text_prompt=pick_prompt,
@@ -34,11 +35,13 @@ def main():
             predicted_px, depth, K, T_cam2ref)
         action_seq = build_pick_cup_sequence(pt_ref)
         for act in action_seq:
+            # print(act)
             arx_nav_robot.arx.step(act)
         arx_nav_robot.arx.step_lift(15.0)
         # -- get cup end --
 
         # -- turn left pi/2 --
+        time.sleep(5.0)
         arx_nav_robot.run_for_1s(chz=0.5, duration=20.6 / 2.0)
 
         # -- start point --

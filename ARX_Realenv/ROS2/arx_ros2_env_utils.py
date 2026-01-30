@@ -238,11 +238,21 @@ def start_robot_io(camera_type: Literal["color", "depth", "all"] = "all", camera
     return node, executor, t
 
 
-def build_observation(camera_all: Dict[str, Image] | Dict, status_all: Dict[str, object] | None) -> Dict[str, np.ndarray]:
-    """Pack status and camera into a flat observation dict."""
-    obs: Dict[str, np.ndarray | Dict] = {
-        "camera": camera_all or {}, "status": status_all or {}}
-    if isinstance(status_all, dict):
+def build_observation(
+    camera_all: Dict[str, Image] | Dict,
+    status_all: Dict[str, object] | None,
+    include_arm: bool = True,
+    include_camera: bool = True,
+    include_base: bool = True,
+) -> Dict[str, np.ndarray]:
+    """
+    Pack status和相机到扁平观测字典。
+
+    include_arm / include_camera / include_base 控制是否写入对应部分，默认全开。
+    """
+    obs: Dict[str, np.ndarray] = {}
+
+    if include_arm and isinstance(status_all, dict):
         lstatus = status_all.get("left")
         rstatus = status_all.get("right")
         if lstatus is not None:
@@ -261,6 +271,8 @@ def build_observation(camera_all: Dict[str, Image] | Dict, status_all: Dict[str,
                 rstatus.joint_cur, dtype=np.float32)
             obs["right_joint_vel"] = np.array(
                 rstatus.joint_vel, dtype=np.float32)
+
+    if include_base and isinstance(status_all, dict):
         base_status = status_all.get("base")
         if base_status is not None:
             obs["base_height"] = np.array(
@@ -271,22 +283,24 @@ def build_observation(camera_all: Dict[str, Image] | Dict, status_all: Dict[str,
                 [base_status.chy], dtype=np.float32)
             obs["base_chz"] = np.array(
                 [base_status.chz], dtype=np.float32)
-    # Attach camera frames as numpy arrays
-    for key, msg in (camera_all or {}).items():
-        if msg is None:
-            continue
-        try:
-            img = msg
-            if isinstance(msg, np.ndarray):
-                img_np = msg
-            else:
-                img_np = np.asarray(img)
-            if "color" in key:
-                img_np = np.asarray(img_np, dtype=np.uint8)
-            obs[key] = img_np
-        except Exception:
-            # Skip broken frame
-            continue
+
+    if include_camera:
+        # Attach camera frames as numpy arrays
+        for key, msg in (camera_all or {}).items():
+            if msg is None:
+                continue
+            try:
+                img = msg
+                if isinstance(msg, np.ndarray):
+                    img_np = msg
+                else:
+                    img_np = np.asarray(img)
+                if "color" in key:
+                    img_np = np.asarray(img_np, dtype=np.uint8)
+                obs[key] = img_np
+            except Exception:
+                # Skip broken frame
+                continue
     return obs
 
 

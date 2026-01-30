@@ -39,14 +39,247 @@ class ARXRobotEnv():
         if not success:
             raise RuntimeError(f"Failed to enable the robot: {error_message}")
 
+    def reset(self) -> Dict[str, np.ndarray]:
+        """
+        Resets the robot to the initial pose.
+
+        Returns:
+            observation (Dict[str, np.ndarray]): The initial state of the robot.
+        """
+        # 1. Stop the base and lift the base to a safe height
+        self.step_base(0.0, 0.0, 0.0, 0.5)
+        self.step_lift(0.0)
+        # 2. Go to the initial pose
+        success, error_message = self._go_to_initial_pose()
+        if not success:
+            raise RuntimeError(
+                f"Failed to go to the initial pose: {error_message}")
+
+        # 3. Get the initial observation
+        obs = self.get_observation()
+
+        return obs
+
+    def step_lift(self, height: float):
+        """Adjust base hight"""
+        success, error = self._apply_lift(height)
+        if not success:
+            raise RuntimeError(f"Failed to lift base: {error}")
+        print(f"lift to height {height} done")
+
+    def step_base(self, vx: float, vy: float, vz: float, duration: float):
+        """Move base"""
+        success, error = self._apply_base(vx, vy, vz, duration)
+        if not success:
+            raise RuntimeError(f"Failed to move base: {error}")
+
+    def step(self, action: np.ndarray):
+        """
+        Execute one time step in the environment.
+
+        Args:
+            action (np.ndarray): Action provided by the agent. Shape (action_dim,).
+
+        Returns:
+            observation (np.ndarray): New state of the robot.
+            reward (float): Scalar reward value.
+            done (bool): Whether the episode has ended.
+            info (dict): Diagnostic information.
+        """
+
+        # 1. Apply action
+        success, error_message = self._apply_action(action)
+        if not success:
+            self.close()
+            raise RuntimeError(f"Failed to apply action: {error_message}")
+
+        # 2. State Observation
+        # Retrieve latest data from ROS topics
+        obs = self.get_observation()
+
+        reward = 0.0
+        is_done = False
+        info = dict()
+        # 3. Reward Calculation
+        # reward = self._get_reward(obs, action)
+
+        # 4. Termination Logic
+        # is_done = self._get_termination(obs, action)
+
+        # info = self._get_info()
+
+        return obs, reward, is_done, info
+    
+    def get_observation(self, save_dir: Optional[str] = None,
+                        include_arm: bool = True,
+                        include_camera: bool = True,
+                        include_base: bool = True) -> Dict[str, np.ndarray]:
+        """
+        Fetch latest status/camera and pack into observation.
+
+        save_dir: 默认 None 时沿用实例化时的 self.dir；显式传值覆盖；传入空串/False 可关闭保存。
+        """
+        real_save_dir = self.dir if save_dir is None else save_dir
+        camera_all, status_all = self.node.get_camera(
+            save_dir=real_save_dir, target_size=self.img_size, return_status=True)
+        obs = build_observation(
+            camera_all, status_all,
+            include_arm=include_arm,
+            include_camera=include_camera,
+            include_base=include_base,
+        )
+        if not obs:
+            try:
+                self.close()
+            except Exception:
+                pass
+            raise RuntimeError("Empty observation, node shutdown.")
+        return obs
+    def close(self):
+        """
+        Clean up resources and shut down ROS nodes.
+        """
+
+        # 1. Stop the base and make both arms go to initial pose and set height to 0
+        self.step_base(0.0, 0.0, 0.0, 1.0)
+        success, error_message = self._go_to_initial_pose()
+        self.step_lift(0.0)
+        if not success:
+            raise RuntimeError(
+                f"Failed to go to the initial pose: {error_message}")
+
+        # 2. Disable the robot
+
+        success, error_message = self._disable_robot()
+        if not success:
+            raise RuntimeError(f"Failed to disable the robot: {error_message}")
+
+    # ----------------- Private helpers -----------------
+
+    def _apply_lift(self, height: float) -> Tuple[bool, str | None]:
+        """Internal: move base height with incremental steps."""
+        msg = PosCmd()
+        base_status = self.node.get_robot_status().get("base")
+        if base_status is None:
+            return (False, "base status unavailable")
+        curr = float(base_status.height)
+        target = float(height)
+        step = 0.1 if target >= curr else -0.1
+        while abs(curr - target) > 0.01:
+            curr += step
+            # 防止越界
+            if (step > 0 and curr > target) or (step < 0 and curr < target):
+                curr = target
+            msg.height = curr
+            if not self.node.send_base_msg(msg):
+                return (False, "base command not sent")
+            time.sleep(0.03)
+        return (True, None)
+
+    def _apply_base(self, vx: float, vy: float, vz: float, duration: float) -> Tuple[bool, str | None]:
+        """Internal: move base chassis with timeout."""
+        start = time.time()
+        msg = PosCmd()
+        while time.time() - start < duration:
+            msg.chx = vx
+            msg.chy = vy
+            msg.chz = vz
+            base_status = self.node.get_robot_status().get("base")
+            msg.height = float(base_status.height) if base_status is not None else 0.0
+            msg.mode1 = 1
+            if not self.node.send_base_msg(msg):
+                return (False, "base command not sent")
+        # stop
+        msg.chx = msg.chy = msg.chz = 0.0
+        msg.mode1 = 2
+        if not self.node.send_base_msg(msg):
+            return (False, "base stop command not sent")
+        return (True, None)
+
+    def _apply_action(self, action: Dict[str, np.ndarray]) -> Tuple[bool, str | None]:
+        """
+        apply to the robot single step control command.
+            action: the action provieded by the agent（step level）.
+            end: x,y,z,roll,pitch,yaw,gripper
+            joint: joint0,joint1,...,joint5,gripper
+
+        """
+        curr_obs = self.get_observation()
+        steps_by_side, pose_changed = compute_interp_steps(
+            curr_obs,
+            action,
+            self.max_v_xyz,
+            self.max_v_rpy,
+            self.duration_per_step,
+            self.min_steps_per_action,
+            self.min_steps_gripper,
+        )
+        sequences = interpolate_action(curr_obs, action, steps_by_side)
+        lsequence = sequences.get("left") or []
+        rsequence = sequences.get("right") or []
+        max_len = max(len(lsequence), len(rsequence))
+        for i in range(max_len):
+            has_left = i < len(lsequence)
+            has_right = i < len(rsequence)
+            if not has_left and not has_right:
+                continue
+            t0 = time.time()
+            if has_left:
+                lmsg = RobotCmd()
+                lmsg.mode = 4
+                lmsg.end_pos = [float(x) for x in lsequence[i][:6]]
+                lmsg.gripper = float(lsequence[i][6])
+                lok = self.node.send_control_msg("left", lmsg)
+                if not lok:
+                    return (False, f"left: command not sent")
+            if has_right:
+                rmsg = RobotCmd()
+                rmsg.mode = 4
+                rmsg.end_pos = [float(x) for x in rsequence[i][:6]]
+                rmsg.gripper = float(rsequence[i][6])
+                rok = self.node.send_control_msg("right", rmsg)
+                if not rok:
+                    return (False, f"right: command not sent")
+            dt = time.time() - t0
+            sleep_need = self.duration_per_step - dt
+            if sleep_need > 0:
+                time.sleep(sleep_need)
+        return (True, None)
+
+    def _go_to_initial_pose(self) -> Tuple[bool, str | None]:
+        """Move arms to initial pose."""
+        home_action = {
+            "left": np.array([0, 0, 0, 0, 0, 0, 0], dtype=np.float32),
+            "right": np.array([0, 0, 0, 0, 0, 0, 0], dtype=np.float32),
+
+        }
+        success, error_message = self._apply_action(home_action)
+        if not success:
+            print(
+                f"failed to go home: {error_message}, force switch to home mode")
+            self._set_special_mode(1)
+            return (False, f"failed to go home: {error_message}")
+        else:
+            print(f"both arms homed")
+        return (True, None)
+
+    def _set_special_mode(self, mode: int) -> Tuple[bool, str | None]:
+        """Set special mode, e.g. gravity."""
+        mode_type = {0: "soft", 1: "home", 2: "protect", 3: "gravity"}
+        cmd = RobotCmd()
+        cmd.mode = mode
+        # 0-soft,1-home,2-protect,3-gravity
+        self.node.send_control_msg("left", cmd)
+        self.node.send_control_msg("right", cmd)
+        print(f"set mode for both arms {mode_type.get(mode, 'unknown')} done")
+        return (True, None)
+
     def _setup_space(self):
         """Configure action/observation space."""
         # TODO 定义一下动作空间，可以快速check
-
         pass
 
     def _enable_robot(self) -> Tuple[bool, str | None]:
-
         rclpy.init()
 
         self.node, self.executor, self.executor_thread = start_robot_io(
@@ -91,206 +324,6 @@ class ARXRobotEnv():
         if rclpy.ok():
             erorr.append("ROS2 shutdown failed")
         return (False, "reason: ".join(erorr) if erorr else "other error")
-
-    def reset(self) -> Dict[str, np.ndarray]:
-        """
-        Resets the robot to the initial pose.
-
-        Returns:
-            observation (Dict[str, np.ndarray]): The initial state of the robot.
-        """
-        # 1. Lift the base to a safe height
-        self.step_lift(0.0)
-        # 2. Go to the initial pose
-        success, error_message = self._go_to_initial_pose()
-        if not success:
-            raise RuntimeError(
-                f"Failed to go to the initial pose: {error_message}")
-
-        # 3. Get the initial observation
-        obs = self._get_observation()
-
-        return obs
-
-    def step_lift(self, height: float):
-        """Adjust base hight"""
-        msg = PosCmd()
-        curr = float(self.node.get_robot_status()["base"].height)
-        target = height
-        step = 0.1 if target >= curr else -0.1
-        while abs(curr - target) > 0.01:
-            curr += step
-            # 防止越界
-            if (step > 0 and curr > target) or (step < 0 and curr < target):
-                curr = target
-            msg.height = curr
-            self.node.send_base_msg(msg)
-            time.sleep(0.03)
-        print(f"lift to height {height} done")
-
-    def step_base(self, vx: float, vy: float, vz: float, duration: float):
-        """Move base"""
-        start = time.time()
-        while time.time() - start < duration:
-            msg = PosCmd()
-            msg.chx = vx
-            msg.chy = vy
-            msg.chz = vz
-            msg.height = float(self.node.get_robot_status()["base"].height)
-            msg.mode1 = 1
-            self.node.send_base_msg(msg)
-        # stop
-        msg.chx = msg.chy = msg.chz = 0.0
-        msg.mode1 = 2
-        self.node.send_base_msg(msg)
-
-    def step(self, action: np.ndarray):
-        """
-        Execute one time step in the environment.
-
-        Args:
-            action (np.ndarray): Action provided by the agent. Shape (action_dim,).
-
-        Returns:
-            observation (np.ndarray): New state of the robot.
-            reward (float): Scalar reward value.
-            done (bool): Whether the episode has ended.
-            info (dict): Diagnostic information.
-        """
-
-        # 1. Apply action
-        success, error_message = self._apply_action(action)
-        if not success:
-            self.close()
-            raise RuntimeError(f"Failed to apply action: {error_message}")
-
-        # 2. State Observation
-        # Retrieve latest data from ROS topics
-        obs = self._get_observation()
-
-        reward = 0.0
-        is_done = False
-        info = dict()
-        # 3. Reward Calculation
-        # reward = self._get_reward(obs, action)
-
-        # 4. Termination Logic
-        # is_done = self._get_termination(obs, action)
-
-        # info = self._get_info()
-
-        return obs, reward, is_done, info
-
-    def close(self):
-        """
-        Clean up resources and shut down ROS nodes.
-        """
-
-        # 1. Go to initial pose and set height to 0
-        success, error_message = self._go_to_initial_pose()
-        self.step_lift(0.0)
-        if not success:
-            raise RuntimeError(
-                f"Failed to go to the initial pose: {error_message}")
-
-        # 2. Disable the robot
-
-        success, error_message = self._disable_robot()
-        if not success:
-            raise RuntimeError(f"Failed to disable the robot: {error_message}")
-
-    def _go_to_initial_pose(self) -> Tuple[bool, str | None]:
-        """Move arms to initial pose."""
-        home_action = {
-            "left": np.array([0, 0, 0, 0, 0, 0, 0], dtype=np.float32),
-            "right": np.array([0, 0, 0, 0, 0, 0, 0], dtype=np.float32),
-
-        }
-        success, error_message = self._apply_action(home_action)
-        if not success:
-            print(
-                f"failed to go home: {error_message}, force switch to home mode")
-            self._set_special_mode(1)
-            return (False, f"failed to go home: {error_message}")
-        else:
-            print(f"both arms homed")
-        return (True, None)
-
-    def _set_special_mode(self, mode: int) -> Tuple[bool, str | None]:
-        """Set special mode, e.g. gravity."""
-        mode_type = {0: "soft", 1: "home", 2: "protect", 3: "gravity"}
-        cmd = RobotCmd()
-        cmd.mode = mode
-        # 0-soft,1-home,2-protect,3-gravity
-        self.node.send_control_msg("left", cmd)
-        self.node.send_control_msg("right", cmd)
-        print(f"set mode for both arms {mode_type.get(mode, 'unknown')} done")
-        return (True, None)
-
-    def _get_observation(self) -> Dict[str, np.ndarray]:
-        """Fetch latest status/camera and pack into observation."""
-        # time.sleep(0.05)  # allow status/camera to refresh
-        camera_all, status_all = self.node.get_camera(
-            save_dir=self.dir, target_size=self.img_size, return_status=True)
-        obs = build_observation(camera_all, status_all)
-        if not obs:
-            try:
-                self.close()
-            except Exception:
-                pass
-            raise RuntimeError("Empty observation, node shutdown.")
-        return obs
-
-    def _apply_action(self, action: Dict[str, np.ndarray]) -> Tuple[bool, str | None]:
-        """
-        apply to the robot single step control command.
-            action: the action provieded by the agent（step level）.
-            end: x,y,z,roll,pitch,yaw,gripper
-            joint: joint0,joint1,...,joint5,gripper
-
-        """
-        curr_obs = self._get_observation()
-        steps_by_side, pose_changed = compute_interp_steps(
-            curr_obs,
-            action,
-            self.max_v_xyz,
-            self.max_v_rpy,
-            self.duration_per_step,
-            self.min_steps_per_action,
-            self.min_steps_gripper,
-        )
-        sequences = interpolate_action(curr_obs, action, steps_by_side)
-        lsequence = sequences.get("left") or []
-        rsequence = sequences.get("right") or []
-        max_len = max(len(lsequence), len(rsequence))
-        for i in range(max_len):
-            has_left = i < len(lsequence)
-            has_right = i < len(rsequence)
-            if not has_left and not has_right:
-                continue
-            t0 = time.time()
-            if has_left:
-                lmsg = RobotCmd()
-                lmsg.mode = 4
-                lmsg.end_pos = [float(x) for x in lsequence[i][:6]]
-                lmsg.gripper = float(lsequence[i][6])
-                lok = self.node.send_control_msg("left", lmsg)
-                if not lok:
-                    return (False, f"left: command not sent")
-            if has_right:
-                rmsg = RobotCmd()
-                rmsg.mode = 4
-                rmsg.end_pos = [float(x) for x in rsequence[i][:6]]
-                rmsg.gripper = float(rsequence[i][6])
-                rok = self.node.send_control_msg("right", rmsg)
-                if not rok:
-                    return (False, f"right: command not sent")
-            dt = time.time() - t0
-            sleep_need = self.duration_per_step - dt
-            if sleep_need > 0:
-                time.sleep(sleep_need)
-        return (True, None)
-
 
 def main():
     arx = ARXRobotEnv(duration_per_step=1.0/20.0,

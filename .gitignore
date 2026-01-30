@@ -3,6 +3,7 @@
 **.catkin_workspace
 **install
 **log
+**.DS_Store
 "**/.vscode/**",
 "**/.git/**",
 "**/.DS_Store",
