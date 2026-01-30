@@ -66,6 +66,7 @@ class AutoNav_Robot():
         self.x_r = 0.0
         self.y_r = 0.0
         self.theta_r = 0.0
+        self.pose_log = []
 
         # -- update frequency --
         self.dt = 0.05
@@ -100,13 +101,12 @@ class AutoNav_Robot():
         self.frame_id = 0
 
         # -- default height --
-        self.default_height = 19.0
+        self.default_height = 15.0
 
         self.lift_to_default_height()
 
     def get_color_depth(self):
         frames = self.arx.node.get_camera(target_size=(640, 480), return_status=False)
-        
         color = frames.get("camera_h_color")
         depth = frames.get("camera_h_aligned_depth_to_color")
         return color, depth
@@ -142,20 +142,19 @@ class AutoNav_Robot():
         self.arx.node.send_base_msg(msg)
 
     def run_for_1s(self, chx=0.0, chy=0.0, chz=0.0, duration=1.0, record=True):
-        start = time.time()
-        # while time.time() - start < duration:
+        v = 0.24 * chx**2
+        omega = chz * (2 * math.pi / 20.6)
+
         msg = PosCmd()
         msg.chx = chx
         msg.chy = chy
         msg.chz = chz
-        # 每次发送控制指令时，都附带期望的高度，这样底盘就会一直维持该高度
         msg.height = self.default_height
         msg.mode1 = 1
-
         self.arx.node.send_base_msg(msg)
 
-        while self.running and time.time() - start < duration:
-            time.sleep(0.03)   # 小步 sleep，方便中断
+        if record and self.running:
+            self.integrate_motion(v, omega, duration)
 
         self.stop()
 
@@ -187,6 +186,7 @@ Return the result in JSON format as:
 
         points = predict_multi_points_from_rgb(
             color,
+            text_prompt="",
             all_prompt=prompt,
             base_url="http://172.28.102.11:22014/v1",
             model_name="Qwen3-VL-8B-Instruct",
@@ -197,7 +197,7 @@ Return the result in JSON format as:
         return points
     
     def detect_goal(self, color):
-        prompt = """Provide one or more points coordinate of objects region this sentence describes: tennis ball on the ground.
+        prompt = """Provide one or more points coordinate of objects region this sentence describes: red circular landmark on the ground.
         Output format: Return the result in JSON format as:
         [ 
             {"point_2d": [x, y]}
@@ -206,6 +206,7 @@ Return the result in JSON format as:
 
         points = predict_multi_points_from_rgb(
                 color,
+                text_prompt="",
                 all_prompt=prompt,
                 base_url="http://172.28.102.11:22014/v1",
                 model_name="Qwen3-VL-8B-Instruct",
@@ -257,6 +258,7 @@ Return the result in JSON format as:
 
         points = predict_multi_points_from_rgb(
             color,
+            text_prompt="",
             all_prompt=prompt,
             base_url="http://172.28.102.11:22014/v1",
             model_name="Qwen3-VL-8B-Instruct",
@@ -282,12 +284,27 @@ Return the result in JSON format as:
 
     
     # compute pose
+    def initialize_pose(self):
+        self.x_r = 0.0
+        self.y_r = 0.0
+        self.theta_r = 0.0
+        self.pose_log = []
+
     def update_pose(self, v, omega):
 
         # 更新机器人位姿
         self.x_r += v * math.cos(self.theta_r) * self.dt
         self.y_r += v * math.sin(self.theta_r) * self.dt
         self.theta_r += omega * self.dt
+
+        self.pose_log.append((self.x_r, self.y_r, self.theta_r))
+
+    def integrate_motion(self, v, omega, duration):
+        t = 0.0
+        while t < duration and self.running:
+            self.update_pose(v, omega)
+            time.sleep(self.dt)
+            t += self.dt
 
     # get robot pose
     def get_robot_pose(self):
@@ -301,7 +318,6 @@ Return the result in JSON format as:
             y_t = math.sin(-theta_r)*(x_g - x_r) + math.cos(-theta_r)*(y_g - y_r)
             dist = math.hypot(x_t, y_t)
             if dist >= lookahead and x_t > 0:
-                # print(index)
                 return x_t, y_t, dist
         # return the final point
         x_t = math.cos(-theta_r)*(path_xy[-1][0] - x_r) - math.sin(-theta_r)*(path_xy[-1][1] - y_r)
@@ -310,12 +326,11 @@ Return the result in JSON format as:
         return x_t, y_t, dist
     
     # pure pursuite follow path
-    def follow_path(self, path_xy, lookahead=0.6, v_max=0.12, v_min=0.09, omega_max=0.2):
+    def follow_path(self, path_xy, lookahead=0.6, v_max=0.12, v_min=0.10, omega_max=0.2):
         # reset pose
-        self.x_r = 0.0
-        self.y_r = 0.0
-        self.theta_r = 0.0
-
+        # self.x_r = 0.0
+        # self.y_r = 0.0
+        # self.theta_r = 0.0
 
         rate = self.dt
         while self.running:
@@ -345,7 +360,7 @@ Return the result in JSON format as:
             msg.height = self.default_height
             msg.mode1 = 1
             self.arx.node.send_base_msg(msg)
-            print(math.sqrt(v / 0.24))
+            # print(math.sqrt(v / 0.24))
 
             # 更新位姿
             self.update_pose(v, omega)
