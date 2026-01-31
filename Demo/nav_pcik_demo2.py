@@ -164,7 +164,8 @@ def main():
             return_path,
             lookahead=0.12,
             v_max=0.12,
-            show_index=True
+            show_index=True,
+            reach_dis=0.11
         )
 
         # -- final turn left --
