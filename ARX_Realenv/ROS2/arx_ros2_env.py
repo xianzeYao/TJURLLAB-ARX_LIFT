@@ -47,8 +47,8 @@ class ARXRobotEnv():
             observation (Dict[str, np.ndarray]): The initial state of the robot.
         """
         # 1. Stop the base and lift the base to a safe height
-        self.step_base(0.0, 0.0, 0.0, 0.5)
         self.step_lift(0.0)
+        self.step_base(0.0, 0.0, 0.0, 0.5)
         # 2. Go to the initial pose
         success, error_message = self._go_to_initial_pose()
         if not success:
@@ -109,7 +109,7 @@ class ARXRobotEnv():
         # info = self._get_info()
 
         return obs, reward, is_done, info
-    
+
     def get_observation(self, save_dir: Optional[str] = None,
                         include_arm: bool = True,
                         include_camera: bool = True,
@@ -135,6 +135,7 @@ class ARXRobotEnv():
                 pass
             raise RuntimeError("Empty observation, node shutdown.")
         return obs
+
     def close(self):
         """
         Clean up resources and shut down ROS nodes.
@@ -185,7 +186,8 @@ class ARXRobotEnv():
             msg.chy = vy
             msg.chz = vz
             base_status = self.node.get_robot_status().get("base")
-            msg.height = float(base_status.height) if base_status is not None else 0.0
+            msg.height = float(
+                base_status.height) if base_status is not None else 0.0
             msg.mode1 = 1
             if not self.node.send_base_msg(msg):
                 return (False, "base command not sent")
@@ -324,6 +326,7 @@ class ARXRobotEnv():
         if rclpy.ok():
             erorr.append("ROS2 shutdown failed")
         return (False, "reason: ".join(erorr) if erorr else "other error")
+
 
 def main():
     arx = ARXRobotEnv(duration_per_step=1.0/20.0,

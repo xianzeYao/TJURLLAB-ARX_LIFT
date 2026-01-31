@@ -13,7 +13,7 @@ from __future__ import annotations
 import ast
 import base64
 import re
-from typing import Any, Dict, List, Sequence, Tuple
+from typing import Any, Dict, List, Sequence, Tuple, Optional, Union
 
 import cv2
 import numpy as np
@@ -106,7 +106,7 @@ def predict_point_from_rgb(
     text_prompt: str,
     all_prompt: str = "",
     base_url: str = "http://172.28.102.11:22002/v1",
-    model_name: str = "Embodied-R1.5-SFT-v1",
+    model_name: str = "Embodied-R1.5-SFT-0128",
     api_key: str = "EMPTY",
     assume_bgr: bool = True,
     norm_range: float = 1000.0,
@@ -154,6 +154,8 @@ def predict_point_from_rgb(
         seed=seed,
     )
     generated = resp.choices[0].message.content
+    print(f"LLM raw output:{generated}")
+
     points = omni_decode_points(generated)
     if not points:
         raise RuntimeError(f"未解析到坐标，模型输出: {generated}")
@@ -175,7 +177,7 @@ def predict_multi_points_from_rgb(
     text_prompt: str,
     all_prompt: str = "",
     base_url: str = "http://172.28.102.11:22002/v1",
-    model_name: str = "Embodied-R1.5-SFT-v1",
+    model_name: str = "Embodied-R1.5-SFT-0128",
     api_key: str = "EMPTY",
     assume_bgr: bool = True,
     norm_range: float = 1000.0,
@@ -183,7 +185,8 @@ def predict_multi_points_from_rgb(
     top_p: float = 0.8,
     seed: int = 3407,
     max_tokens: int = 512,
-) -> List[Tuple[float, float]]:
+    return_raw: bool = False,
+) -> Union[List[Tuple[float, float]], Tuple[List[Tuple[float, float]], Optional[str]]]:
     """
     发送单张图像到 vLLM/OpenAI 兼容接口，返回像素点坐标列表。
 
@@ -240,6 +243,8 @@ def predict_multi_points_from_rgb(
         v = float(np.clip(arr[1], 0, h - 1))
         result.append((u, v))
 
+    if return_raw:
+        return result, generated
     return result
 
 

@@ -141,6 +141,7 @@ class RobotIO(Node):
         return True
 
     def get_robot_status(self):
+        # TODO:考虑删除此方法，直接使用 get_camera(return_status=True) 获取快照
         with self.status_lock:
             status = dict(self.latest_status)
             status["base"] = self.latest_base
@@ -277,13 +278,12 @@ def build_observation(
         if base_status is not None:
             obs["base_height"] = np.array(
                 [base_status.height], dtype=np.float32)
-            obs["base_chx"] = np.array(
-                [base_status.chx], dtype=np.float32)
-            obs["base_chy"] = np.array(
-                [base_status.chy], dtype=np.float32)
-            obs["base_chz"] = np.array(
-                [base_status.chz], dtype=np.float32)
-
+            obs["base_wheel1"] = np.array(
+                [base_status.temp_float_data[1]], dtype=np.float32) #后轮
+            obs["base_wheel2"] = np.array(
+                [base_status.temp_float_data[2]], dtype=np.float32) #右前
+            obs["base_wheel3"] = np.array(
+                [base_status.temp_float_data[3]], dtype=np.float32) #左前
     if include_camera:
         # Attach camera frames as numpy arrays
         for key, msg in (camera_all or {}).items():

@@ -18,7 +18,7 @@ DEFAULT_INTRINSICS = WORKSPACE / "ARX_Realenv/Tools/instrinsics_camerah.json"
 DEFAULT_EXTRINSICS = WORKSPACE / \
     "ARX_Realenv/Tools/new_extrinsics_cam_h_left.json"
 
-BIAS_REF2CAM = np.array([0.25, 0.24, 0.0, 0.0])
+BIAS_REF2CAM = np.array([0.48, 0.0, 0.0, 0.0])
 
 
 def depth_to_meters(raw_depth: float) -> float:
@@ -69,6 +69,7 @@ def pixel_to_ref_point(
     ref_point = T_cam2ref @ cam_point
     return ref_point[:3]
 
+
 def pixel_to_base_point(
     pixel: Tuple[int, int],
     depth_image: np.ndarray,
@@ -87,6 +88,7 @@ def pixel_to_base_point(
     cam_point = np.array([x_cam, y_cam, z, 1.0], dtype=np.float64)
     base_point = T_cam2ref @ cam_point + BIAS_REF2CAM
     return base_point[:2]
+
 
 __all__ = [
     "load_intrinsics",
