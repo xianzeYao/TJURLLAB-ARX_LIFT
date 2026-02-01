@@ -15,7 +15,7 @@ def main():
     points, message = predict_multi_points_from_rgb(
         image=color,
         text_prompt="",
-        all_prompt="the center of the highest cups",
+        all_prompt="the two highest cups' bottom center",
         assume_bgr=False,
         return_raw=True
     )
