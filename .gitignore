@@ -4,6 +4,7 @@
 **install
 **log
 **.DS_Store
+.vscode/**
 "**/.vscode/**",
 "**/.git/**",
 "**/.DS_Store",
