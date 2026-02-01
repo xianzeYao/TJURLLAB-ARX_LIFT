@@ -38,7 +38,7 @@ T_CAM2REF = np.array([
     [0.0, 0.0, 0.0, 1.0]
 ])
 
-BIAS_REF2CAM = np.array([0.25, 0.24, 0.0, 0.0])
+BIAS_REF2CAM = np.array([0.0, 0.48, 0.0, 0.0])
 
 class AutoNav_Robot():
     def __init__(self, camera_type="all", camera_view=("camera_h",), img_size=(640, 480)):
@@ -162,34 +162,39 @@ class AutoNav_Robot():
             self.action_log.append((chx, chy, chz, duration))
 
     def turn_right_corner(self, color):
-        prompt = """The task is: go forward and then make a decisive right turn at the nearest table corner.
+        prompt = """**Task**
 
-Requirements for the trajectory:
-- Give exactly 5 points on the ground forming a movement trajectory.
-- The trajectory starts at the bottom-center area of the image (robot position).
-- The robot first moves mostly straight forward.
-- The right turn should happen mainly in the second half of the trajectory.
-- The turning curvature should be relatively high: the last 3 points should shift clearly to the right with smaller forward progress.
-- Avoid a long, gradual curve. The turn should be compact and decisive.
+Given an image captured from a top-mounted robot camera, generate a smooth ground trajectory that moves the robot forward first and then makes a right turn toward the nearest table corner.
 
-Direction information:
-- The robot is located at the bottom center of the image.
-- The robot is facing upward in the image.
-- Forward motion corresponds to decreasing y values in the image.
-- Rightward motion corresponds to increasing x values in the image.
+**Trajectory requirements**
 
-The points must on ground, not on table.
+- Output **exactly 5 points** on the **ground (floor)** that form a single continuous trajectory.
+- The **first point** must be at the **bottom center of the image**, representing the robot’s current position.
+- The **last point** must be on the **ground at the table corner**, not on the table surface.
+- The trajectory must represent **a clear forward motion first, followed by a right turn**.
+- The **first 2–3 points** should lie approximately on a **straight forward path** before any noticeable rightward deviation.
+- The right turn should **start later**, not immediately near the starting point.
+- The turn must be **smooth and gradual**, not abrupt.
+- Points must be **monotonically progressing forward** (no backward motion).
 
+**Coordinate system**
+
+- Use **image pixel coordinates**:
+    - x increases to the right
+    - y increases downward
+- All returned points must be inside the image bounds.
 Output format:
 Return the result in JSON format as:
-[{"point_2d": [x, y]}]"""
+[
+  {"point_2d": [x, y]}
+]"""
 
         points = predict_multi_points_from_rgb(
             color,
             text_prompt="",
             all_prompt=prompt,
-            base_url="http://172.28.102.11:22014/v1",
-            model_name="Qwen3-VL-8B-Instruct",
+            base_url="http://172.28.102.11:22002/v1",
+            model_name="Embodied-R1.5-SFT-0128",
             api_key="EMPTY",
             assume_bgr=False
         )
@@ -208,8 +213,8 @@ Return the result in JSON format as:
                 color,
                 text_prompt="",
                 all_prompt=prompt,
-                base_url="http://172.28.102.11:22014/v1",
-                model_name="Qwen3-VL-8B-Instruct",
+                base_url="http://172.28.102.11:22002/v1",
+                model_name="Embodied-R1.5-SFT-0128",
                 api_key="EMPTY",
             )
 
@@ -311,35 +316,38 @@ Return the result in JSON format as:
     def get_robot_pose(self):
         return self.x_r, self.y_r, self.theta_r
 
-    def get_lookahead_point(self, path_xy, lookahead):
+    def get_lookahead_point(self, path_xy, lookahead, _index):
         x_r, y_r, theta_r = self.get_robot_pose()
         for index, (x_g, y_g) in enumerate(path_xy):
             # change coordinate
             x_t = math.cos(-theta_r)*(x_g - x_r) - math.sin(-theta_r)*(y_g - y_r)
             y_t = math.sin(-theta_r)*(x_g - x_r) + math.cos(-theta_r)*(y_g - y_r)
             dist = math.hypot(x_t, y_t)
-            if dist >= lookahead and x_t > 0:
-                return x_t, y_t, dist
+            if dist >= lookahead and x_t > 0 and index >= _index:
+                return x_t, y_t, dist, index
         # return the final point
         x_t = math.cos(-theta_r)*(path_xy[-1][0] - x_r) - math.sin(-theta_r)*(path_xy[-1][1] - y_r)
         y_t = math.sin(-theta_r)*(path_xy[-1][0] - x_r) + math.cos(-theta_r)*(path_xy[-1][1] - y_r)
         dist = math.hypot(x_t, y_t)
-        return x_t, y_t, dist
+        return x_t, y_t, dist, len(path_xy) - 1
     
     # pure pursuite follow path
-    def follow_path(self, path_xy, lookahead=0.6, v_max=0.12, v_min=0.10, omega_max=0.2):
+    def follow_path(self, path_xy, lookahead=0.6, v_max=0.12, v_min=0.10, omega_max=0.2, reach_dis=0.08, show_index=False):
         # reset pose
         # self.x_r = 0.0
         # self.y_r = 0.0
         # self.theta_r = 0.0
 
+        index = 0
         rate = self.dt
         while self.running:
             # 获取目标点
-            x_t, y_t, dist = self.get_lookahead_point(path_xy, lookahead)
+            x_t, y_t, dist, index = self.get_lookahead_point(path_xy, lookahead, index)
+            if show_index:
+                print(index)
 
             # 非常接近终点，允许真正停下
-            if dist < 0.05:
+            if dist < reach_dis:
                 break
 
             # Pure Pursuit 曲率

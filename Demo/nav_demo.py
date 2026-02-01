@@ -1,5 +1,5 @@
 from autonav_robot import AutoNav_Robot
-from nav_utils import path_to_actions, merge_forward_actions
+from nav_utils import path_to_actions, merge_forward_actions, index_resample
 import time
 import cv2
 import math
@@ -26,7 +26,7 @@ def main():
         revised_points = []
     
         for (u, v) in points:
-            v += 95
+            u += 90
             cv2.circle(
                 color,
                 center=(int(u), int(v)),
@@ -39,7 +39,7 @@ def main():
 
         cv2.imwrite("../Testdata4Nav/test_1.png", color)
 
-        # time.sleep(10.0)
+        time.sleep(10.0)
 
         path_xy = []
 
@@ -50,11 +50,13 @@ def main():
 
         print(path_xy[:3])
 
-        arx_nav_robot.follow_path(path_xy[:3], lookahead=0.12, v_max=0.12)
+        arx_nav_robot.follow_path(path_xy[:3], lookahead=0.12, v_max=0.12, show_index=True)
+
+        # time.sleep(10.0)
 
         # -- turn right --
         print("Turn right......")
-        arx_nav_robot.run_for_1s(chz=-0.5, duration=20.6 / 4.0)
+        arx_nav_robot.run_for_1s(chz=-0.5, duration=20.6 / 3.0)
 
         color, depth = arx_nav_robot.get_color_depth()
         points = arx_nav_robot.detect_goal(color)
@@ -82,15 +84,15 @@ def main():
         # -- move to goal --
         for action, action_content in actions:
             if action == "forward":
-                arx_nav_robot.run_for_1s(chx=0.5, duration=(action_content - 0.45)/0.064)
+                arx_nav_robot.run_for_1s(chx=0.5, duration=(action_content - 0.5)/0.064)
             elif action == "rotate":
                 if action_content <= 0:
-                    arx_nav_robot.run_for_1s(chz=-0.5, duration=-action_content/(0.5 * 2*math.pi / 20.6))
+                    arx_nav_robot.run_for_1s(chz=-0.5, duration=-(action_content - 0.5)/(0.5 * 2*math.pi / 20.6))
                 else:
                     arx_nav_robot.run_for_1s(chz=0.5, duration=action_content/(0.5 * 2*math.pi / 20.6))
 
         # -- turn right start--
-        arx_nav_robot.run_for_1s(chz=-0.5, duration=20.6 / 4.0, record=False)
+        arx_nav_robot.run_for_1s(chz=-0.5, duration=20.6 / 3.0)
         time.sleep(10.0)
         # -- turn right end--
 
@@ -197,16 +199,23 @@ def main():
         # return
 
         # -- turn right --
-        arx_nav_robot.run_for_1s(chz=-0.5, duration=(20.6 * 3.0) / 4.0)
+        arx_nav_robot.run_for_1s(chz=-0.5, duration=(20.6 * 2.0) / 3.0)
 
         # -- return origin path -- 
-        return_path = [(x, y) for (x, y, _) in reversed(arx_nav_robot.pose_log)]
+        raw_path = [(x, y) for (x, y, _) in reversed(arx_nav_robot.pose_log)]
+        # return_path = index_resample(
+        #     raw_path,
+        #     num_points=25,
+        #     gamma=1.8
+        # )
+        return_path = raw_path
         print(return_path)
-        time.sleep(10.0)
+        # time.sleep(10.0)
         arx_nav_robot.follow_path(
             return_path,
             lookahead=0.12,
-            v_max=0.12
+            v_max=0.12,
+            show_index=True
         )
 
         # -- final turn left --

@@ -5,6 +5,30 @@ import tty
 from typing import List, Tuple
 import math
 
+def index_resample(points, num_points=25, gamma=1.8):
+    """
+    仅按索引非均匀采样：
+    - 前面点密
+    - 后面点稀
+    """
+    n = len(points)
+    if n <= num_points:
+        return points
+
+    u = np.linspace(0, 1, num_points)
+    idx = (u ** gamma) * (n - 1)
+    idx = np.round(idx).astype(int)
+
+    # 防止重复索引（可选但推荐）
+    idx[0] = 0
+    idx[-1] = n - 1
+    for i in range(1, len(idx)):
+        if idx[i] <= idx[i - 1]:
+            idx[i] = idx[i - 1] + 1
+    idx = np.clip(idx, 0, n - 1)
+
+    return [points[i] for i in idx]
+
 def depth_to_meters(raw_depth: float) -> float:
     """兼容毫米与米的深度值。"""
     if not np.isfinite(raw_depth) or raw_depth <= 0:
