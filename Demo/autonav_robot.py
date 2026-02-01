@@ -56,7 +56,7 @@ class AutoNav_Robot():
             img_size=img_size,
         )
 
-        time.sleep(1.0)
+        time.sleep(3.0)
         obs = self.arx.reset()
 
         # -- emergency stop --
@@ -161,6 +161,82 @@ class AutoNav_Robot():
         if record and self.running:
             self.action_log.append((chx, chy, chz, duration))
 
+    # intelligent turn right
+    def turn_right_until_see_goal(self, goal, max_angle):
+        # start_turn_right
+        msg = PosCmd()
+        msg.chx = 0.0
+        msg.chy = 0.0
+        msg.chz = -0.5
+        msg.height = self.default_height
+        msg.mode1 = 1
+        self.arx.node.send_base_msg(msg)
+        start_time = time.time()
+
+        max_turn_time = max_angle / (0.2 * (2 * math.pi / 20.6))
+
+#         detect_prompt = """Is there {goal}? If you think there is, ouput the point coordinates on the center of it; if you think there is not, the output point coordinates should be (1000, 1000).
+#         Output format:
+# Return the result in JSON format as:
+# [
+#   {"point_2d": [x, y]}
+# ]""".replace("{goal}", goal)
+
+        judge_prompt = f"""
+Is there a {goal} in the picture? If you think there is no {goal}, output 'False'; if you think there is {goal}, output 'True'.
+"""     
+        detect_prompt = prompt_format = (
+        "Provide one or more points coordinate of objects region this sentence describes: "
+        f"{goal}. "
+        'The answer should be presented in JSON format as follows: [{"point_2d": [x, y]}].'
+    )
+        # detect_prompt = detect_prompt.replace("{goal}", goal)
+
+        print(judge_prompt)
+
+        print(detect_prompt)
+
+        detect_flag = False
+
+        while not detect_flag and time.time() - start_time < max_turn_time:
+            color, depth = self.get_color_depth() 
+            # h, w = color.shape[:2]
+            points, generated_content = predict_multi_points_from_rgb(
+                color,
+                text_prompt="",
+                all_prompt=judge_prompt,
+                base_url="http://172.28.102.11:22002/v1",
+                model_name="Embodied-R1.5-SFT-0128",
+                api_key="EMPTY",
+                assume_bgr=False,
+                return_raw=True
+            )
+
+            if generated_content == "True":
+                break
+        
+        while not detect_flag and time.time() - start_time < max_turn_time:
+            color, depth = self.get_color_depth() 
+            h, w = color.shape[:2]
+            points = predict_multi_points_from_rgb(
+                color,
+                text_prompt="",
+                all_prompt=detect_prompt,
+                base_url="http://172.28.102.11:22002/v1",
+                model_name="Embodied-R1.5-SFT-0128",
+                api_key="EMPTY",
+                assume_bgr=False
+            )
+
+            if points[0][0] > w / 3.0 and points[0][0] < (w * 2.0) / 3.0:
+                print(points[0])
+                detect_flag = True
+
+        self.stop()
+        
+        return points, detect_flag, color
+
+
     def turn_right_corner(self, color):
         prompt = """**Task**
 
@@ -196,7 +272,7 @@ Return the result in JSON format as:
             base_url="http://172.28.102.11:22002/v1",
             model_name="Embodied-R1.5-SFT-0128",
             api_key="EMPTY",
-            assume_bgr=False
+            # assume_bgr=False
         )
 
         return points
@@ -268,10 +344,11 @@ Return the result in JSON format as:
             base_url="http://172.28.102.11:22014/v1",
             model_name="Qwen3-VL-8B-Instruct",
             api_key="EMPTY",
-            assume_bgr=False
+            # assume_bgr=False
         )
 
         return points
+
     
     # emergency read keyboard
     def keyboard_listener(self):
@@ -282,10 +359,12 @@ Return the result in JSON format as:
                 continue
 
             if ch == 'q':
-                print("Key 'q' pressed! Emergency stop!")
+                # print("Key 'q' pressed! Emergency stop!")
+                # raise RuntimeError("Key 'q' pressed! Emergency stop!")
                 self.running = False
+                self.arx.close() 
+                # self.running = False
                 self.stop()
-                self.arx.close()
                 break
 
     

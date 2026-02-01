@@ -342,32 +342,8 @@ def main():
 
     time.sleep(1.5)
     obs = arx.reset()
-    frame = obs.get("camera_h_color")
-    if frame is not None:
-        cv2.imshow("camera_h_color", frame)
-        cv2.waitKey(1)
-    else:
-        print("no camera_h_color in obs")
-
-    arx.step_lift(10.0)
-
-    actions = []
-    x = 0.00
-    for i in range(2):
-        x += 0.05
-        if i % 2 == 0:
-            g = -3.4
-        else:
-            g = 0.0
-        actions.append({
-            "left": np.array([x, 0, 0, 0, 0, 0, g], dtype=np.float32),
-            "right": np.array([x, 0, 0, 0, 0, 0, g], dtype=np.float32),
-        })
-
-    for i in range(2):
-        obs, _, _, _ = arx.step(actions[i])
-        arx.step_lift(10.0 - (i+1) * 2.0)
-    arx.step_base(0.5, 0.0, 0.0, 1)
+    arx.step_lift(18.0)
+    time.sleep(30.0)
     arx.close()
 
 

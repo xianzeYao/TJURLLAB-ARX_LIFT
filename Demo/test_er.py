@@ -11,24 +11,38 @@ from arx_ros2_env import ARXRobotEnv  # noqa
 
 
 def main():
-    color = cv2.imread("../Testdata4Mani/multicup.png")
-    points = predict_multi_points_from_rgb(
+    color = cv2.imread("../Testdata4Mani/cup_bottom.png")
+    points, message = predict_multi_points_from_rgb(
         image=color,
-        all_prompt="Pick the top cup and place it to the coaster with the smallest number.",
+        text_prompt="",
+        all_prompt="the center of the highest cups",
+        assume_bgr=False,
+        return_raw=True
     )
-
+    i = 1
     for (u, v) in points:
         cv2.circle(
             color,
             center=(int(u), int(v)),
             radius=5,
-            color=(0, 255, 0),
+            color=(0, 0, 255),
             thickness=-1  # -1 表示实心圆
         )
+        cv2.putText(
+            color,
+            text=f"{i}",
+            org=(int(u)-3, int(v)+1),
+            fontFace=cv2.FONT_HERSHEY_SIMPLEX,
+            fontScale=0.3,
+            color=(0, 255, 0),
+            thickness=1
+        )
+        i += 1
+
+    print(f"Predicted Points: {points}")
+    print(f"Generated message: {message}")
     cv2.imshow("Predicted Points", color)
-    cv2.waitKey(0)
-    cv2. destroyAllWindows()
-    cv2.imwrite("../Testdata4Mani/multicup_out.png", color)
+    cv2.imwrite("../Testdata4Mani/cup_bottom_out.png", color)
 
 
 if __name__ == "__main__":

@@ -62,7 +62,7 @@ def make_pick_back_action(pt_ref: Optional[np.ndarray]) -> Dict[str, np.ndarray]
     """夹住回到初始位置，保持不动。"""
     base = np.zeros(3, dtype=np.float32) if pt_ref is None else pt_ref
     return {
-        "left": np.array([0, 0, 0, 0, 0, 0, GRIPPER_CUP], dtype=np.float32),
+        "left": np.array([(base[0] - GRIPPER_OFFSET)/2, 0, 0, 0, 0, 0, GRIPPER_CUP], dtype=np.float32),
         "right": np.array([0, 0, 0, 0, 0, 0, 0], dtype=np.float32),
     }
 

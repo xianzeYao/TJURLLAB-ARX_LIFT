@@ -201,8 +201,10 @@ def predict_multi_points_from_rgb(
     h, w = image.shape[:2]
     data_uri = _image_to_data_uri(image, assume_bgr=assume_bgr)
     if all_prompt:
+        print("使用自定义完整提示语...")
         prompt = all_prompt
     else:
+        print("生成多点坐标提示语...")
         prompt = (
             "Provide one or more points coordinate of objects region this sentence describes: "
             f"{text_prompt}. "
@@ -227,7 +229,7 @@ def predict_multi_points_from_rgb(
     )
     generated = resp.choices[0].message.content
     points = omni_decode_points(generated)
-    if not points:
+    if not points and not return_raw:
         raise RuntimeError(f"未解析到坐标，模型输出: {generated}")
 
     result: List[Tuple[float, float]] = []
