@@ -152,30 +152,13 @@ def main():
     place_pt_ref: Optional[np.ndarray] = None
     attachment_uvs: Optional[List[Tuple[int, int]]] = None
 
-    pick_prompt = """Given an RGB image, output the minimal sequence of cup pick actions required to finally pick the yellow cup.
-
-                        Rules:
-                        - A cup can only be picked if no other cup is placed on top of it.
-                        - A cup that is partially or fully occluded by another cup is NOT pickable.
-                        - If the goal cup is not immediately pickable, you must first pick the cups that block it.
-                        - Cups that are on the same level and not stacked on top of each other do not affect each other’s pickability.
-                        - The order of pick actions is the actual execution order.
-
-                        For each pick action, provide one valid 2D pick point on the visible surface of the cup.
-
-                        Output ONLY a JSON array in execution order:
-                        [
-                        {
-                            "target": "cup description",
-                            "point_2d": [x, y]
-                        }
-                        ]"""
-    # pick_prompt = """Given an RGB image, output the minimal sequence of cup pick actions required to finally pick the red cup at the bottom center.
+    # pick_prompt = """Given an RGB image, output the minimal sequence of cup pick actions required to finally pick the red cup.
 
     #                     Rules:
     #                     - A cup can only be picked if no other cup is placed on top of it.
     #                     - A cup that is partially or fully occluded by another cup is NOT pickable.
     #                     - If the goal cup is not immediately pickable, you must first pick the cups that block it.
+    #                     - Cups that are on the same level and not stacked on top of each other do not affect each other’s pickability.
     #                     - The order of pick actions is the actual execution order.
 
     #                     For each pick action, provide one valid 2D pick point on the visible surface of the cup.
@@ -183,9 +166,26 @@ def main():
     #                     Output ONLY a JSON array in execution order:
     #                     [
     #                     {
+    #                         "target": "cup description",
     #                         "point_2d": [x, y]
     #                     }
     #                     ]"""
+    pick_prompt = """Given an RGB image, output the minimal sequence of cup pick actions required to finally pick the red cup.
+
+                        Rules:
+                        - A cup can only be picked if no other cup is placed on top of it.
+                        - A cup that is partially or fully occluded by another cup is NOT pickable.
+                        - If the goal cup is not immediately pickable, you must first pick the cups that block it.
+                        - The order of pick actions is the actual execution order.
+
+                        For each pick action, provide one valid 2D pick point on the visible surface of the cup.
+
+                        Output ONLY a JSON array in execution order:
+                        [
+                        {
+                            "point_2d": [x, y]
+                        }
+                        ]"""
     place_prompt = "the smaller number at the center of a white round coaster"
 
     try:
@@ -212,7 +212,6 @@ def main():
                             color,
                             text_prompt="",
                             all_prompt=pick_prompt,
-                            assume_bgr=False,
                             return_raw=True,
                         )
                         if isinstance(raw_result, tuple):
@@ -259,7 +258,6 @@ def main():
                             sub_u, sub_v = predict_point_from_rgb(
                                 color_latest,
                                 text_prompt=sub_prompt,
-                                assume_bgr=False,
                             )
                             uv = (int(round(sub_u)), int(round(sub_v)))
                             raw_depth = depth_latest[uv[1], uv[0]]
@@ -289,7 +287,6 @@ def main():
                         u, v = predict_point_from_rgb(
                             color_latest,
                             text_prompt=place_prompt,
-                            assume_bgr=False,
                         )
                         predicted_place_uv = (int(round(u)), int(round(v)))
                         attachment_uvs = None

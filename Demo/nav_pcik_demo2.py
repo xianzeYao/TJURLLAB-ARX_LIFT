@@ -24,7 +24,6 @@ def main():
         u, v = predict_point_from_rgb(
             color,
             text_prompt=pick_prompt,
-            assume_bgr=False,
         )
         predicted_px = (int(round(u)), int(round(v)))
         # TODO 深度check
@@ -136,7 +135,6 @@ def main():
         u, v = predict_point_from_rgb(
             color,
             text_prompt=place_prompt,
-            assume_bgr=False,
         )
         predicted_px = (int(round(u)), int(round(v)))
         # TODO 深度check
