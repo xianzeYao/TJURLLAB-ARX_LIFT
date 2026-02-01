@@ -27,7 +27,7 @@ def main():
         )
     cv2.imshow("Predicted Points", color)
     cv2.waitKey(0)
-    
+    cv2. destroyAllWindows()
     cv2.imwrite("../Testdata4Mani/multicup_out.png", color)
 
 

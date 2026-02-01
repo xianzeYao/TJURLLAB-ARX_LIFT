@@ -1,5 +1,0 @@
-{
-    "python.analysis.extraPaths": [
-        "./ARX_Realenv/ROS2"
-    ]
-}
