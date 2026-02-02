@@ -91,28 +91,28 @@ def main():
                 arx_nav_robot.run_for_1s(chx=0.5, duration=(action_content - 0.5)/0.064)
             elif action == "rotate":
                 if action_content <= 0:
-                    arx_nav_robot.run_for_1s(chz=-0.5, duration=float(-(action_content)/(0.5 * 2*math.pi / 20.6)))
+                    arx_nav_robot.run_for_1s(chz=-0.5, duration=float((-action_content/(0.5 * 2*math.pi / 20.6))) - 20.6/15.0)
                 else:
                     arx_nav_robot.run_for_1s(chz=0.5, duration=action_content/(0.5 * 2*math.pi / 20.6))
 
         # -- turn right start--
         # arx_nav_robot.turn_right_until_see_goal(goal="black round coaster on table", max_angle=(math.pi*2.0/3.0))
-        arx_nav_robot.run_for_1s(chx=-0.5, duration=20.6/12.0)
-        points, detect_flag, color = arx_nav_robot.turn_right_until_see_goal(goal="black round coaster", max_angle=(math.pi*2.0/3.0))
-        if not detect_flag:
-            raise RuntimeError(f"未找到目标")
-        cv2.circle(
-            color,
-            center=(int(points[0][0]), int(points[0][1])),
-            radius=5,
-            color=(0, 0, 255),
-            thickness=-1  # -1 表示实心圆
-        )
+        # arx_nav_robot.run_for_1s(chz=-0.5, duration=20.6/12.0)
+        # points, detect_flag, color = arx_nav_robot.turn_right_until_see_goal(goal="black round coaster", max_angle=(math.pi*2.0/3.0))
+        # if not detect_flag:
+        #     raise RuntimeError(f"未找到目标")
+        # cv2.circle(
+        #     color,
+        #     center=(int(points[0][0]), int(points[0][1])),
+        #     radius=5,
+        #     color=(0, 0, 255),
+        #     thickness=-1  # -1 表示实心圆
+        # )
 
-        cv2.imwrite("../Testdata4Nav/test_3.png", color)
+        # cv2.imwrite("../Testdata4Nav/test_3.png", color)
         
 
-        # arx_nav_robot.run_for_1s(chz=-0.5, duration=20.6 / 2.5)
+        arx_nav_robot.run_for_1s(chz=-0.5, duration=20.6 / 2.5)
         # time.sleep(10.0)
         # -- turn right end--
 
@@ -124,12 +124,12 @@ def main():
 
         # -- return origin path -- 
         raw_path = [(x, y) for (x, y, _) in reversed(arx_nav_robot.pose_log)]
-        # return_path = index_resample(
-        #     raw_path,
-        #     num_points=25,
-        #     gamma=1.8
-        # )
-        return_path = raw_path
+        return_path = index_resample(
+            raw_path,
+            num_points=30,
+            gamma=1.8
+        )
+        # return_path = raw_path
         print(return_path)
         # time.sleep(10.0)
         arx_nav_robot.follow_path(

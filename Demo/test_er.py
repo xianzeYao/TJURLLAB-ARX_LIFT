@@ -15,7 +15,9 @@ def main():
     points, message = predict_multi_points_from_rgb(
         image=color,
         text_prompt="",
-        all_prompt="the two highest cups' bottom center",
+        all_prompt=""""Provide one or more points coordinate of objects region this sentence describes: "
+            black and purple cup 's bottom center point.
+            'The answer should be presented in JSON format as follows: [{"point_2d": [x, y]}].'""",
         assume_bgr=False,
         return_raw=True
     )
