@@ -154,7 +154,6 @@ def predict_point_from_rgb(
         seed=seed,
     )
     generated = resp.choices[0].message.content
-    print(f"LLM raw output:{generated}")
 
     points = omni_decode_points(generated)
     if not points:
@@ -201,10 +200,8 @@ def predict_multi_points_from_rgb(
     h, w = image.shape[:2]
     data_uri = _image_to_data_uri(image, assume_bgr=assume_bgr)
     if all_prompt:
-        print("使用自定义完整提示语...")
         prompt = all_prompt
     else:
-        print("生成多点坐标提示语...")
         prompt = (
             "Provide one or more points coordinate of objects region this sentence describes: "
             f"{text_prompt}. "

@@ -46,6 +46,7 @@ class ARXRobotEnv():
         Returns:
             observation (Dict[str, np.ndarray]): The initial state of the robot.
         """
+        time.sleep(2.5)
         # 1. Stop the base and lift the base to a safe height
         self.step_lift(0.0)
         self.step_base(0.0, 0.0, 0.0, 0.5)
@@ -340,7 +341,6 @@ def main():
                       dir="testdata",
                       img_size=(640, 480))
 
-    time.sleep(1.5)
     obs = arx.reset()
     arx.step_lift(18.0)
     time.sleep(30.0)

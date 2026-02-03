@@ -21,6 +21,7 @@ source demo/bin/activate
 # prompt
 pick_prompt = "a middle and center position of the highest cup"
 place_prompt = "the farthest black dot at the center of a white round coaster"
+plaaning_pick_place_prompt = """Point out Purple cup and the coaster with the label of number 3"""
 planning_pick_prompt = """Given an RGB image, output the minimal sequence of cup pick actions required to finally pick the red cup.
 
                         Rules:
@@ -38,3 +39,6 @@ planning_pick_prompt = """Given an RGB image, output the minimal sequence of cup
                         }
                         ]"""
 
+plannig_place_prompt = """"1. Point to top of the black cup.
+                           2. Point to top of the purple cup.
+                           - Output the pixel coordinates of the center points."""

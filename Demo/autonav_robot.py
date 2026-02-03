@@ -56,7 +56,6 @@ class AutoNav_Robot():
             img_size=img_size,
         )
 
-        time.sleep(3.0)
         obs = self.arx.reset()
 
         # -- emergency stop --
@@ -153,6 +152,7 @@ class AutoNav_Robot():
         msg.mode1 = 1
         self.arx.node.send_base_msg(msg)
 
+
         if record and self.running:
             self.integrate_motion(v, omega, duration)
 
@@ -160,6 +160,25 @@ class AutoNav_Robot():
 
         if record and self.running:
             self.action_log.append((chx, chy, chz, duration))
+
+    def run_for_1s_return(self, chx=0.0, chy=0.0, chz=0.0, duration=1.0, record=True):
+        msg = PosCmd()
+        msg.chx = chx
+        msg.chy = chy
+        msg.chz = chz
+        msg.height = self.default_height
+        msg.mode1 = 1
+        self.arx.node.send_base_msg(msg)
+        start_time = time.time()
+
+        if duration < 0.1:
+            time.sleep(duration)
+            return
+        
+        else:
+            while time.time() - start_time < duration and self.running:
+                a = 1
+            return
 
     # intelligent turn right
     def turn_right_until_see_goal(self, goal, max_angle):
@@ -230,9 +249,12 @@ Is there a {goal} in the picture? If you think there is no {goal}, output 'False
 
             if points[0][0] > w / 3.0 and points[0][0] < (w * 2.0) / 3.0:
                 print(points[0])
+                self.action_log.append((0.0, 0.0, -0.5, time.time() - start_time))
                 detect_flag = True
 
         self.stop()
+        if not detect_flag:
+            self.action_log.append((0.0, 0.0, -0.5, time.time() - start_time))
         
         return points, detect_flag, color
 
@@ -419,14 +441,18 @@ Return the result in JSON format as:
 
         index = 0
         rate = self.dt
+        final_count = 0
+        max_final_count = (math.hypot(abs(path_xy[-2][0] - path_xy[-1][0]), abs(path_xy[-2][1] - path_xy[-1][1])) / 0.06)
         while self.running:
             # 获取目标点
             x_t, y_t, dist, index = self.get_lookahead_point(path_xy, lookahead, index)
+            if index == len(path_xy) - 1:
+                final_count += 1
             if show_index:
                 print(index)
 
             # 非常接近终点，允许真正停下
-            if dist < reach_dis:
+            if dist < reach_dis or final_count>max_final_count:
                 break
 
             # Pure Pursuit 曲率
@@ -448,10 +474,34 @@ Return the result in JSON format as:
             msg.height = self.default_height
             msg.mode1 = 1
             self.arx.node.send_base_msg(msg)
+            self.action_log.append((msg.chx, msg.chy, msg.chz, rate))
             # print(math.sqrt(v / 0.24))
+            # print(omega / (2 * math.pi / 20.6))
 
             # 更新位姿
             self.update_pose(v, omega)
             time.sleep(rate)
 
         self.stop()
+
+    # Motion Inversion with Forward-only Constraint
+    def motion_inversion(self):
+        # turn back
+        # self.run_for_1s(chz=-0.5, duration=20.6)
+        action_log = self.action_log[1:-5].copy()
+        for chx, chy, chz, duration in reversed(action_log):
+            # ignore still motion
+            if abs(chx) < 1e-3 and abs(chz) < 1e-3:
+                continue
+
+            print((chx, chy, -chz, duration))
+            
+            self.run_for_1s_return(chx, chy, -chz, duration)
+
+            if not self.running:
+                break
+
+
+
+
+

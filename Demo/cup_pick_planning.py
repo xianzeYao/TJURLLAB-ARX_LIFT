@@ -133,7 +133,6 @@ def main():
         camera_view=("camera_h",),
         img_size=(640, 480),
     )
-    time.sleep(3.0)
     arx.reset()
     arx.step_lift(17.0)
 
@@ -150,8 +149,7 @@ def main():
     pick_targets: List[str] = []
     predicted_place_uv: Optional[Tuple[int, int]] = None
     place_pt_ref: Optional[np.ndarray] = None
-    attachment_uvs: Optional[List[Tuple[int, int]]] = None
-
+    # prompt 4 Qwen
     # pick_prompt = """Given an RGB image, output the minimal sequence of cup pick actions required to finally pick the red cup.
 
     #                     Rules:
@@ -167,25 +165,28 @@ def main():
     #                     [
     #                     {
     #                         "target": "cup description",
+    #                        "point_2d": [x, y]
+    #                     }
+    #                     ]"""
+
+    # pick_prompt = """Given an RGB image, output the minimal sequence of cup pick actions required to finally pick the red cup.
+
+    #                     Rules:
+    #                     - A cup can only be picked if no other cup is placed on top of it.
+    #                     - A cup that is partially or fully occluded by another cup is NOT pickable.
+    #                     - If the goal cup is not immediately pickable, you must first pick the cups that block it.
+    #                     - The order of pick actions is the actual execution order.
+
+    #                     For each pick action, provide one valid 2D pick point on the middle center of the cup.
+
+    #                     Output ONLY a JSON array in execution order:
+    #                     [
+    #                     {
     #                         "point_2d": [x, y]
     #                     }
     #                     ]"""
-    pick_prompt = """Given an RGB image, output the minimal sequence of cup pick actions required to finally pick the red cup.
 
-                        Rules:
-                        - A cup can only be picked if no other cup is placed on top of it.
-                        - A cup that is partially or fully occluded by another cup is NOT pickable.
-                        - If the goal cup is not immediately pickable, you must first pick the cups that block it.
-                        - The order of pick actions is the actual execution order.
-
-                        For each pick action, provide one valid 2D pick point on the middle center of the cup.
-
-                        Output ONLY a JSON array in execution order:
-                        [
-                        {
-                            "point_2d": [x, y]
-                        }
-                        ]"""
+    pick_prompt = """Curren Goal is: pick the blue cup. I need to pick up the cups from top to the blue cup. What is the picking plan steps to finish the goal?"""
     place_prompt = "the smaller number at the center of a white round coaster"
 
     try:
@@ -245,64 +246,24 @@ def main():
                     if color_latest is None or depth_latest is None:
                         cv2.waitKey(1)
                         continue
-                    if "attachment" in place_prompt.lower():
-                        prompts = [
-                            "the right and top attachment of the left cup",
-                            "the left and top attachemnt of the right cup",
-                        ]
-                        uv_list = []
-                        pt_refs = []
-                        invalid_depth = False
-                        for sub_prompt in prompts:
-                            sub_u, sub_v = predict_point_from_rgb(
-                                color_latest,
-                                text_prompt=sub_prompt,
-                                assume_bgr=False
-                            )
-                            uv = (int(round(sub_u)), int(round(sub_v)))
-                            raw_depth = depth_latest[uv[1], uv[0]]
-                            if np.isnan(raw_depth) or raw_depth == 0:
-                                print(
-                                    f"预测像素 {uv} 深度无效({raw_depth})，按 r 重新预测"
-                                )
-                                invalid_depth = True
-                                break
-                            uv_list.append(uv)
-                            pt_refs.append(
-                                pixel_to_ref_point(
-                                    uv, depth_latest, K, T_cam2ref)
-                            )
-                        if invalid_depth:
-                            predicted_place_uv = None
-                            place_pt_ref = None
-                            attachment_uvs = None
-                            continue
-                        attachment_uvs = uv_list
-                        predicted_place_uv = tuple(
-                            np.mean(np.array(uv_list),
-                                    axis=0).round().astype(int)
+                    u, v = predict_point_from_rgb(
+                        color_latest,
+                        text_prompt=place_prompt,
+                        assume_bgr=False
+                    )
+                    predicted_place_uv = (int(round(u)), int(round(v)))
+                    raw_depth = depth_latest[predicted_place_uv[1],
+                                             predicted_place_uv[0]]
+                    if np.isnan(raw_depth) or raw_depth == 0:
+                        print(
+                            f"预测像素 {predicted_place_uv} 深度无效({raw_depth})，按 r 重新预测"
                         )
-                        place_pt_ref = np.mean(np.array(pt_refs), axis=0)
-                    else:
-                        u, v = predict_point_from_rgb(
-                            color_latest,
-                            text_prompt=place_prompt,
-                            assume_bgr=False
-                        )
-                        predicted_place_uv = (int(round(u)), int(round(v)))
-                        attachment_uvs = None
-                        raw_depth = depth_latest[predicted_place_uv[1],
-                                                 predicted_place_uv[0]]
-                        if np.isnan(raw_depth) or raw_depth == 0:
-                            print(
-                                f"预测像素 {predicted_place_uv} 深度无效({raw_depth})，按 r 重新预测"
-                            )
-                            predicted_place_uv = None
-                            place_pt_ref = None
-                            continue
-                        place_pt_ref = pixel_to_ref_point(
-                            predicted_place_uv, depth_latest, K, T_cam2ref
-                        )
+                        predicted_place_uv = None
+                        place_pt_ref = None
+                        continue
+                    place_pt_ref = pixel_to_ref_point(
+                        predicted_place_uv, depth_latest, K, T_cam2ref
+                    )
                     print(
                         f"place 预测像素 {predicted_place_uv} -> ref {place_pt_ref.tolist()}，按 e 执行放置"
                     )
@@ -326,9 +287,6 @@ def main():
                     )
             if predicted_place_uv and i % 2 == 1:
                 cv2.circle(disp, predicted_place_uv, 5, (0, 0, 255), -1)
-            if attachment_uvs:
-                for uv in attachment_uvs:
-                    cv2.circle(disp, uv, 5, (255, 0, 0), -1)
             curr_prompt = (
                 "\n".join(pick_targets) if pick_targets else (
                     pick_answer_text or pick_prompt)
@@ -357,7 +315,6 @@ def main():
                 pick_targets = []
                 predicted_place_uv = None
                 place_pt_ref = None
-                attachment_uvs = None
                 continue
 
             if key == ord("p"):
@@ -375,7 +332,6 @@ def main():
                 pick_targets = []
                 predicted_place_uv = None
                 place_pt_ref = None
-                attachment_uvs = None
                 continue
 
             if key == ord("e"):
@@ -402,7 +358,6 @@ def main():
                     arx._go_to_initial_pose()
                     predicted_place_uv = None
                     place_pt_ref = None
-                    attachment_uvs = None
                     i += 1
 
             if key in (27, ord("q")):

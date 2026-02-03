@@ -17,7 +17,6 @@ def main():
                           camera_type="all",
                           camera_view=("camera_h",),
                           img_size=(640, 480))
-        time.sleep(3.0)  # 等待环境初始化完成
         arx.reset()
         open_action = {
             "left":  np.array([0, 0, 0, -1.571, 0, 0, -3.4], dtype=np.float32,),

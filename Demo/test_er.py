@@ -8,16 +8,14 @@ from arx_pointing import predict_multi_points_from_rgb, predict_point_from_rgb
 import sys
 sys.path.append("../ARX_Realenv/ROS2")  # noqa
 from arx_ros2_env import ARXRobotEnv  # noqa
-
-
+## """Curren Goal is: pick the red cup. I need to pick up the cups from top to the red cup. What is the picking plan steps to finish the goal?""",
+## """Curren Goal is: pick the purple cup. I need to pick up the cups from top to the purple cup. What is the picking plan steps to finish the goal?""",
 def main():
-    color = cv2.imread("../Testdata4Mani/cup_bottom.png")
+    color = cv2.imread("../Testdata4Mani/multicup3.png")
     points, message = predict_multi_points_from_rgb(
         image=color,
         text_prompt="",
-        all_prompt=""""Provide one or more points coordinate of objects region this sentence describes: "
-            black and purple cup 's bottom center point.
-            'The answer should be presented in JSON format as follows: [{"point_2d": [x, y]}].'""",
+        all_prompt="""Curren Goal is: pick the red cup. I need to pick up the cups from top to the red cup. What is the picking plan steps to finish the goal?""",
         assume_bgr=False,
         return_raw=True
     )

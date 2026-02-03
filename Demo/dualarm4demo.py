@@ -56,7 +56,6 @@ def main():
                       camera_type="all",
                       camera_view=("camera_h",),
                       img_size=(640, 480))
-    time.sleep(1.5)
     arx.reset()
     arx.step_lift(15.0)
 
