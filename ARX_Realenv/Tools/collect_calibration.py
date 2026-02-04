@@ -1,6 +1,6 @@
 """
 采集眼在手外标定数据：
-- 利用 ARXRobotEnv.get_observation() 同步取相机帧和末端姿态
+- 利用 ARXRobotEnv._get_observation() 同步取相机帧和末端姿态
 - 每次按回车保存一组：camera.png（RGB） + meta.json(end_pos)
 - 进入重力模式便于手拖动末端采样
 """
@@ -95,7 +95,7 @@ def main():
     parser.add_argument(
         "--out-dir",
         type=Path,
-        default=Path("calibration_data"),
+        default=Path("new_right_calibration_data"),
         help="输出目录",
     )
     parser.add_argument(
@@ -150,7 +150,7 @@ def main():
         dir=None,
         img_size=target_size,
     )
-    time.sleep(1.0)  # 等待 IO 稳定
+    time.sleep(2.0)  # 等待 IO 稳定
     if not args.skip_home:
         env.reset()
     else:
@@ -169,7 +169,7 @@ def main():
         user_in = input(f"[{idx:04d}] > ")
         if user_in.strip().lower() in {"q", "quit", "exit"}:
             break
-        obs = env.get_observation()
+        obs = env._get_observation()
         if not obs:
             print("获取观测失败，已跳过。")
             continue

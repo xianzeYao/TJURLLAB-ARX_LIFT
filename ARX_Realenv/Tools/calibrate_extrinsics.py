@@ -207,7 +207,7 @@ def project_ref_point_to_image(
 def main():
     parser = argparse.ArgumentParser(description="眼在手外数据解析（仅输出可知的 R/T）")
     parser.add_argument(
-        "--data-dir", type=Path, default=Path("right_calibration_data"), help="采集数据目录"
+        "--data-dir", type=Path, default=Path("calibration_data"), help="采集数据目录"
     )
     parser.add_argument(
         "--intrinsics",
@@ -236,7 +236,7 @@ def main():
     parser.add_argument(
         "--square-size",
         type=float,
-        default=0.022,
+        default=0.02,
         help="棋盘单格边长（米）",
     )
     parser.add_argument(

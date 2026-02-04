@@ -105,7 +105,7 @@ def main():
 
     window_node = FrameBuffer()
     K = load_intrinsics()
-    T_cam2ref = load_cam2ref()
+    T_cam2ref = load_cam2ref(side="left")
 
     current_pick_uv: Optional[Tuple[int, int]] = None
     current_pick_ref: Optional[np.ndarray] = None

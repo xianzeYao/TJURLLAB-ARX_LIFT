@@ -56,7 +56,7 @@ def place_planning(arx: ARXRobotEnv, reset_robot: bool = True, close_robot: bool
     arx.step_lift(13.0)
 
     K = load_intrinsics()
-    T_cam2ref = load_cam2ref()
+    T_cam2ref = load_cam2ref(side="left")
 
     current_pick_uv: Optional[Tuple[int, int]] = None
     current_pick_ref: Optional[np.ndarray] = None

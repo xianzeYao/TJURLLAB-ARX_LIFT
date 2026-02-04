@@ -72,7 +72,7 @@ def pick_planning(arx: ARXRobotEnv, reset_robot: bool = True, close_robot: bool 
         arx.step_lift(17.0)
 
         K = load_intrinsics()
-        T_cam2ref = load_cam2ref()
+        T_cam2ref = load_cam2ref(side="left")
 
         planned = True
         step_idx = 0

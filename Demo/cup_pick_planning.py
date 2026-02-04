@@ -138,7 +138,7 @@ def main():
 
     window_node = FrameBuffer()
     K = load_intrinsics()
-    T_cam2ref = load_cam2ref()
+    T_cam2ref = load_cam2ref(side="left")
 
     # pick 队列：预测一次后缓存多个点，依次 pick -> place -> pick -> place ...
     pick_uv_queue: List[Tuple[int, int]] = []

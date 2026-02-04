@@ -3,20 +3,22 @@
 
 默认使用的相机的标定文件：
 - 内参: instrics_right4camerah.json
-- 外参: final_extrinsics_cam_h_right.json (T_cam2ref)
+- 外参:
+  - left: new_extrinsics_cam_h_left.json
+  - right: new_extrinsics_cam_h_right.json
 """
 from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Iterable, Tuple
+from typing import Literal, Tuple
 
 import numpy as np
 
 WORKSPACE = Path(__file__).resolve().parent.parent
 DEFAULT_INTRINSICS = WORKSPACE / "ARX_Realenv/Tools/instrinsics_camerah.json"
-DEFAULT_EXTRINSICS = WORKSPACE / \
-    "ARX_Realenv/Tools/new_extrinsics_cam_h_left.json"
+DEFAULT_LEFT_EXTRINSICS = WORKSPACE / "ARX_Realenv/Tools/new_extrinsics_cam_h_left.json"
+DEFAULT_RIGHT_EXTRINSICS = WORKSPACE / "ARX_Realenv/Tools/new_extrinsics_cam_h_right.json"
 
 BIAS_REF2CAM = np.array([0.48, 0.0, 0.0, 0.0])
 
@@ -40,14 +42,40 @@ def load_intrinsics(path: Path | str | None = None) -> np.ndarray:
     return K
 
 
-def load_cam2ref(path: Path | str | None = None) -> np.ndarray:
-    """读取 4x4 齐次矩阵 T_cam2ref。"""
-    ext_path = Path(path) if path else DEFAULT_EXTRINSICS
+def _load_cam2ref_matrix(ext_path: Path) -> np.ndarray:
     payload = json.loads(ext_path.read_text())
     T = np.asarray(payload.get("T_cam2ref"), dtype=np.float64)
     if T.shape != (4, 4):
         raise ValueError(f"外参矩阵形状异常: {T.shape}")
     return T
+
+
+def load_cam2ref(
+    path: Path | str | None = None,
+    side: Literal["left", "right"] | None = None,
+) -> np.ndarray | tuple[np.ndarray, np.ndarray]:
+    """
+    读取 T_cam2ref。
+
+    规则:
+    - 传 `path`：返回该文件的单个 4x4 矩阵；
+    - 不传 `path` 且传 `side`：返回对应 side 的默认 4x4 矩阵；
+    - 默认（path/side 都不传）：返回 (T_left, T_right) 两个 4x4 矩阵。
+    """
+    if path is not None:
+        return _load_cam2ref_matrix(Path(path))
+
+    if side == "left":
+        return _load_cam2ref_matrix(DEFAULT_LEFT_EXTRINSICS)
+    if side == "right":
+        return _load_cam2ref_matrix(DEFAULT_RIGHT_EXTRINSICS)
+    if side is not None:
+        raise ValueError(f"side must be 'left' or 'right', got: {side!r}")
+
+    return (
+        _load_cam2ref_matrix(DEFAULT_LEFT_EXTRINSICS),
+        _load_cam2ref_matrix(DEFAULT_RIGHT_EXTRINSICS),
+    )
 
 
 def pixel_to_ref_point(

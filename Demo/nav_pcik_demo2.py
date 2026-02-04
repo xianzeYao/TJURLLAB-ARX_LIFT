@@ -15,7 +15,7 @@ def main():
         # -- get cup start --
         arx_nav_robot.arx.step_lift(18.0)
         K = load_intrinsics()
-        T_cam2ref = load_cam2ref()
+        T_cam2ref = load_cam2ref(side="left")
         pt_ref = None
         pick_prompt = "the highest cup"
         color, depth = arx_nav_robot.get_color_depth()
@@ -128,7 +128,7 @@ def main():
         # -- put cup start --
         arx_nav_robot.arx.step_lift(20.0)
         K = load_intrinsics()
-        T_cam2ref = load_cam2ref()
+        T_cam2ref = load_cam2ref(side="left")
         pt_ref = None
         place_prompt = "the black round coaster"
         color, depth = arx_nav_robot.get_color_depth()
