@@ -39,6 +39,6 @@ planning_pick_prompt = """Given an RGB image, output the minimal sequence of cup
                         }
                         ]"""
 
-plannig_place_prompt = """"1. Point to top of the black cup.
-                           2. Point to top of the purple cup.
+plannig_place_prompt = """"1. Point to top of the xxx cup.
+                           2. Point to top of the xxx cup.
                            - Output the pixel coordinates of the center points."""

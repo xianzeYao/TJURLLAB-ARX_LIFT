@@ -5,8 +5,9 @@
 **log
 **.DS_Store
 .vscode/**
-"**/.vscode/**",
-"**/.git/**",
-"**/.DS_Store",
-"**/__pycache__"
+**/.vscode/**
+**/.git/**"
+**/.DS_Store
+**/__pycache__
+**Test*/
 ""

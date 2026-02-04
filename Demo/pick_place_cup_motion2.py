@@ -20,7 +20,7 @@ def make_pick_move_action(pt_ref: Optional[np.ndarray], arm: str) -> Dict[str, n
     """张开夹爪偏移到目标附近，保持不动。"""
     base = np.zeros(3, dtype=np.float32) if pt_ref is None else pt_ref
     active = np.array(
-        [base[0] - GRIPPER_OFFSET-0.02, base[1], base[2]+0.01, 0, 0, 0, OPEN],
+        [base[0] - GRIPPER_OFFSET-0.02, base[1], base[2], 0, 0, 0, OPEN],
         dtype=np.float32,
     )
     return _make_arm_action(arm, active)
@@ -30,7 +30,7 @@ def make_pick_robust_action(pt_ref: Optional[np.ndarray], arm: str) -> Dict[str,
     """执行向前移动，准备鲁棒夹取位置，保持不动。"""
     base = np.zeros(3, dtype=np.float32) if pt_ref is None else pt_ref
     active = np.array(
-        [base[0] - GRIPPER_OFFSET + 0.02, base[1], base[2]+0.01, 0, 0, 0, OPEN],
+        [base[0] - GRIPPER_OFFSET + 0.02, base[1], base[2], 0, 0, 0, OPEN],
         dtype=np.float32,
     )
     return _make_arm_action(arm, active)
@@ -41,7 +41,7 @@ def make_close_action(pt_ref: Optional[np.ndarray], arm: str) -> Dict[str, np.nd
     base = np.zeros(3, dtype=np.float32) if pt_ref is None else pt_ref
     active = np.array(
         [base[0] - GRIPPER_OFFSET + 0.02, base[1],
-            base[2]+0.01, 0, 0, 0, GRIPPER_CUP],
+            base[2], 0, 0, 0, GRIPPER_CUP],
         dtype=np.float32,
     )
     return _make_arm_action(arm, active)
@@ -105,7 +105,8 @@ def make_open_action(pt_ref: Optional[np.ndarray], arm: str) -> Dict[str, np.nda
     """夹爪张开放置"""
     base = np.zeros(3, dtype=np.float32) if pt_ref is None else pt_ref
     active = np.array(
-        [base[0] - GRIPPER_OFFSET-0.01, base[1], base[2] + Z_CUP-0.02, 0, 0, 0, OPEN],
+        [base[0] - GRIPPER_OFFSET-0.01, base[1],
+            base[2] + Z_CUP-0.02, 0, 0, 0, OPEN],
         dtype=np.float32,
     )
     return _make_arm_action(arm, active)
@@ -129,7 +130,7 @@ def make_release_action(pt_ref: Optional[np.ndarray], arm: str) -> Dict[str, np.
     return _make_arm_action(arm, active)
 
 
-def build_pick_cup_sequence(pt_ref: Optional[np.ndarray], arm: str):
+def build_pick_cup_sequence2(pt_ref: Optional[np.ndarray], arm: str):
     """返回抓取动作序列，不执行。"""
     return [
         make_pick_move_action(pt_ref, arm),
@@ -140,7 +141,7 @@ def build_pick_cup_sequence(pt_ref: Optional[np.ndarray], arm: str):
     ]
 
 
-def build_place_cup_sequence(pt_ref: Optional[np.ndarray], arm: str):
+def build_place_cup_sequence2(pt_ref: Optional[np.ndarray], arm: str):
     """返回放置动作序列，不执行。"""
     return [
         make_place_move_action(pt_ref, arm),

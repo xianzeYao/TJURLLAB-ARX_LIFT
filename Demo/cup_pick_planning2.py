@@ -78,7 +78,8 @@ def pick_planning(arx: ARXRobotEnv, reset_robot: bool = True, close_robot: bool 
         step_idx = 0
         plan_steps: List[str] = []
 
-        pick_prompt = "Current Goal is: pick the red cup. I need to pick up the cups from top to the goal cup.What is the picking plan steps to finish the goal?"
+        goal_cup = "red cup"
+        pick_prompt = f"Current Goal is: pick the {goal_cup}. I need to pick up the cups from top to the goal cup.What is the picking plan steps to finish the goal?"
         place_prompt = "the smaller number at the center of a white round coaster"
 
         plan_steps: List[str] = []
@@ -107,7 +108,7 @@ def pick_planning(arx: ARXRobotEnv, reset_robot: bool = True, close_robot: bool 
                     print(f"  {i+1}. {step}")
                     # 将文字绘制在图片上
             cv2.imshow(confirm_win, vis_img)
-            print("按'y' 确认, 'r' 重试, 'n' 退出")
+            print("按'y' 确认, 'r' 重试, 'p' 更新目标, 'n' 退出")
             key = cv2.waitKey(0)
             if key == ord('y') and current_plan:
                 plan_steps = current_plan
@@ -115,6 +116,17 @@ def pick_planning(arx: ARXRobotEnv, reset_robot: bool = True, close_robot: bool 
                 break
             elif key == ord('r'):
                 print("重新尝试规划...")
+                continue
+            elif key == ord('p'):
+                new_goal = input("输入新的需求 (留空保持当前): ").strip()
+                if new_goal:
+                    goal_cup = new_goal
+                    pick_prompt = (
+                        f"Current Goal is: pick the {goal_cup}. "
+                        "I need to pick up the cups from top to the goal cup."
+                        "What is the picking plan steps to finish the goal?"
+                    )
+                    print(f"新的 pick prompt 已设置为: {pick_prompt!r}")
                 continue
             elif key == ord('n'):
                 print("退出程序。")

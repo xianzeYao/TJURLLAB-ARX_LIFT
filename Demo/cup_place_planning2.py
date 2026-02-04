@@ -127,7 +127,8 @@ def place_planning(arx: ARXRobotEnv, reset_robot: bool = True, close_robot: bool
                     frames = arx.node.get_camera(
                         target_size=(640, 480), return_status=False)
                     color_latest = frames.get("camera_h_color")
-                    depth_latest = frames.get("camera_h_aligned_depth_to_color")
+                    depth_latest = frames.get(
+                        "camera_h_aligned_depth_to_color")
                     if color_latest is None or depth_latest is None:
                         cv2.waitKey(1)
                         continue
@@ -166,8 +167,8 @@ def place_planning(arx: ARXRobotEnv, reset_robot: bool = True, close_robot: bool
                             attachment_uvs = None
                             continue
                         cup1, cup2 = picked_cup[0], picked_cup[1]
-                        place_prompt_multi = f""" Point to top center of the {cup1}.
-                                                  Point to top center of the {cup2}.
+                        place_prompt_multi = f""" Point to top center of the {cup1} cup.
+                                                  Point to top center of the {cup2} cup.
                                                 Output the pixel coordinates of the two points."""
                         print(f"place 使用双点提示词，杯子分别为: {cup1}, {cup2}")
                         raw_uvs, raw_text = predict_multi_points_from_rgb(
@@ -246,7 +247,7 @@ def place_planning(arx: ARXRobotEnv, reset_robot: bool = True, close_robot: bool
                     seq = build_pick_cup_sequence(current_pick_ref, arm="left")
                     for act in seq:
                         arx.step(act)
-                    picked_cup.append(pick_prompt)
+                    picked_cup.append(target)
                     current_pick_uv = None
                     current_pick_ref = None
                     i += 1
