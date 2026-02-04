@@ -17,8 +17,10 @@ import numpy as np
 
 WORKSPACE = Path(__file__).resolve().parent.parent
 DEFAULT_INTRINSICS = WORKSPACE / "ARX_Realenv/Tools/instrinsics_camerah.json"
-DEFAULT_LEFT_EXTRINSICS = WORKSPACE / "ARX_Realenv/Tools/new_extrinsics_cam_h_left.json"
-DEFAULT_RIGHT_EXTRINSICS = WORKSPACE / "ARX_Realenv/Tools/new_extrinsics_cam_h_right.json"
+DEFAULT_LEFT_EXTRINSICS = WORKSPACE / \
+    "ARX_Realenv/Tools/extrinsics_cam_h_left.json"
+DEFAULT_RIGHT_EXTRINSICS = WORKSPACE / \
+    "ARX_Realenv/Tools/extrinsics_cam_h_right.json"
 
 BIAS_REF2CAM = np.array([0.48, 0.0, 0.0, 0.0])
 

@@ -9,7 +9,6 @@ from __future__ import annotations
 """
 
 import argparse
-import time
 from pathlib import Path
 from typing import Optional, Tuple
 
@@ -27,8 +26,6 @@ from pick_place_straw_motion import build_pick_straw_sequence, build_place_straw
 
 WORKSPACE = Path(__file__).resolve().parent.parent
 DEFAULT_INTR = WORKSPACE / "ARX_Realenv/Tools/instrinsics_camerah.json"
-DEFAULT_EXT_LEFT = WORKSPACE / "ARX_Realenv/Tools/final_extrinsics_cam_h_left.json"
-DEFAULT_EXT_RIGHT = WORKSPACE / "ARX_Realenv/Tools/final_extrinsics_cam_h_right.json"
 
 
 def main():
@@ -45,8 +42,7 @@ def main():
         return
 
     K = load_intrinsics(DEFAULT_INTR)
-    T_left = load_cam2ref(DEFAULT_EXT_LEFT)
-    T_right = load_cam2ref(DEFAULT_EXT_RIGHT)
+    T_left, T_right = load_cam2ref()
 
     arx = ARXRobotEnv(duration_per_step=1.0/20.0,
                       min_steps_per_action=60,
@@ -60,38 +56,106 @@ def main():
     arx.step_lift(15.0)
 
     if args.debug:
-        win_left = "dualarm_left"
-        win_right = "dualarm_right"
-        cv2.namedWindow(win_left, cv2.WINDOW_NORMAL)
-        cv2.namedWindow(win_right, cv2.WINDOW_NORMAL)
-
+        windows = {
+            "left": "dualarm_left",
+            "right": "dualarm_right",
+        }
+        views = {
+            "left": {"title": "Left: cup ", "T": T_left},
+            "right": {"title": "Right: straw ", "T": T_right},
+        }
         state = {
-            "left_pick": None,    # type: Optional[Tuple[int, int]]
-            "left_place": None,
-            "right_pick": None,
-            "right_place": None,
-            "left_pick_ref": None,   # type: Optional[np.ndarray]
-            "left_place_ref": None,
-            "right_pick_ref": None,
-            "right_place_ref": None,
+            "left": {"pick_px": None, "place_px": None, "pick_ref": None, "place_ref": None},
+            "right": {"pick_px": None, "place_px": None, "pick_ref": None, "place_ref": None},
         }
 
-        def on_mouse_left(event, x, y, flags, param):
-            if event == cv2.EVENT_LBUTTONDOWN:
-                if state["left_pick"] is None:
-                    state["left_pick"] = (x, y)
-                else:
-                    state["left_place"] = (x, y)
+        for win in windows.values():
+            cv2.namedWindow(win, cv2.WINDOW_NORMAL)
 
-        def on_mouse_right(event, x, y, flags, param):
-            if event == cv2.EVENT_LBUTTONDOWN:
-                if state["right_pick"] is None:
-                    state["right_pick"] = (x, y)
-                else:
-                    state["right_place"] = (x, y)
+        def clear_state():
+            for arm_state in state.values():
+                arm_state["pick_px"] = None
+                arm_state["place_px"] = None
+                arm_state["pick_ref"] = None
+                arm_state["place_ref"] = None
 
-        cv2.setMouseCallback(win_left, on_mouse_left)
-        cv2.setMouseCallback(win_right, on_mouse_right)
+        def on_mouse(arm: str, event, x, y, flags, param):
+            if event != cv2.EVENT_LBUTTONDOWN:
+                return
+            arm_state = state[arm]
+            if arm_state["pick_px"] is None:
+                arm_state["pick_px"] = (x, y)
+            else:
+                arm_state["place_px"] = (x, y)
+
+        cv2.setMouseCallback(
+            windows["left"],
+            lambda event, x, y, flags, param: on_mouse(
+                "left", event, x, y, flags, param),
+        )
+        cv2.setMouseCallback(
+            windows["right"],
+            lambda event, x, y, flags, param: on_mouse(
+                "right", event, x, y, flags, param),
+        )
+
+        def draw_view(color: np.ndarray, arm: str) -> np.ndarray:
+            disp = color.copy()
+            arm_state = state[arm]
+            if arm_state["pick_px"] is not None:
+                cv2.circle(disp, arm_state["pick_px"], 5, (0, 0, 255), -1)
+            if arm_state["place_px"] is not None:
+                cv2.circle(disp, arm_state["place_px"], 5, (255, 0, 0), -1)
+            cv2.putText(
+                disp,
+                views[arm]["title"],
+                (10, 25),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.7,
+                (0, 0, 255),
+                2,
+                cv2.LINE_AA,
+            )
+            return disp
+
+        def cache_ref_points(depth: np.ndarray):
+            for arm in ("left", "right"):
+                T = views[arm]["T"]
+                arm_state = state[arm]
+                for px_key, ref_key in (("pick_px", "pick_ref"), ("place_px", "place_ref")):
+                    px = arm_state[px_key]
+                    if px is None or arm_state[ref_key] is not None:
+                        continue
+                    u, v = px
+                    raw = depth[v, u]
+                    if not np.isfinite(raw) or raw <= 0:
+                        raise ValueError(f"{arm} {px_key} 深度无效: {raw} @ {px}")
+                    arm_state[ref_key] = pixel_to_ref_point(px, depth, K, T)
+
+        def execute_arm(arm: str):
+            arm_state = state[arm]
+            pick_ref = arm_state["pick_ref"]
+            place_ref = arm_state["place_ref"]
+            if pick_ref is None or place_ref is None:
+                print(f"{arm} 臂缺少 pick/place 点，跳过。")
+                return
+
+            if arm == "left":
+                pick_seq = build_pick_cup_sequence(pick_ref, arm="left")
+                place_seq = build_place_cup_sequence(place_ref, arm="left")
+                arm_desc = "左臂(杯子)"
+            else:
+                pick_seq = build_pick_straw_sequence(pick_ref, arm="right")
+                place_seq = build_place_straw_sequence(place_ref, arm="right")
+                arm_desc = "右臂(杯子)"
+
+            for act in pick_seq:
+                arx.step(act)
+            for act in place_seq:
+                arx.step(act)
+            arx._go_to_initial_pose()
+            print(
+                f"{arm_desc}执行完毕 pick={pick_ref.tolist()} place={place_ref.tolist()}")
 
         try:
             while True:
@@ -103,82 +167,24 @@ def main():
                     cv2.waitKey(1)
                     continue
 
-                disp_l = color.copy()
-                disp_r = color.copy()
-                if state["left_pick"] is not None:
-                    cv2.circle(disp_l, state["left_pick"], 5, (0, 0, 255), -1)
-                if state["left_place"] is not None:
-                    cv2.circle(disp_l, state["left_place"], 5, (255, 0, 0), -1)
-                if state["right_pick"] is not None:
-                    cv2.circle(disp_r, state["right_pick"], 5, (0, 0, 255), -1)
-                if state["right_place"] is not None:
-                    cv2.circle(
-                        disp_r, state["right_place"], 5, (255, 0, 0), -1)
-
-                cv2.putText(disp_l, "Left: cup (pick red, place blue)",
-                            (10, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2, cv2.LINE_AA)
-                cv2.putText(disp_r, "Right: straw (pick red, place blue)",
-                            (10, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2, cv2.LINE_AA)
-                cv2.imshow(win_left, disp_l)
-                cv2.imshow(win_right, disp_r)
+                cv2.imshow(windows["left"], draw_view(color, "left"))
+                cv2.imshow(windows["right"], draw_view(color, "right"))
                 key = cv2.waitKey(1) & 0xFF
                 if key in (27, ord("q")):
                     break
                 if key == ord("r"):
-                    state["left_pick"] = state["left_place"] = None
-                    state["right_pick"] = state["right_place"] = None
-                    state["left_pick_ref"] = state["left_place_ref"] = None
-                    state["right_pick_ref"] = state["right_place_ref"] = None
+                    clear_state()
                     continue
                 if key == ord("e"):
-                    frames = arx.node.get_camera(
-                        target_size=(640, 480), return_status=False)
-                    color = frames.get("camera_h_color")
-                    depth = frames.get("camera_h_aligned_depth_to_color")
-                    if color is None or depth is None:
-                        print("无有效图像，无法执行。")
-                        continue
-
-                    def _maybe_cache(px_key: str, ref_key: str, T):
-                        px = state[px_key]
-                        if px is None or state[ref_key] is not None:
-                            return
-                        u, v = px
-                        raw = depth[v, u]
-                        if not np.isfinite(raw) or raw <= 0:
-                            raise ValueError(f"深度无效: {raw} @ {px}")
-                        state[ref_key] = pixel_to_ref_point(px, depth, K, T)
-
-                    _maybe_cache("left_pick", "left_pick_ref", T_left)
-                    _maybe_cache("left_place", "left_place_ref", T_left)
-                    _maybe_cache("right_pick", "right_pick_ref", T_right)
-                    _maybe_cache("right_place", "right_place_ref", T_right)
-
-                    if state["left_pick_ref"] is not None and state["left_place_ref"] is not None:
-                        lp_pick = state["left_pick_ref"]
-                        lp_place = state["left_place_ref"]
-                        for act in build_pick_cup_sequence(lp_pick, arm="left"):
-                            arx.step(act)
-                        for act in build_place_cup_sequence(lp_place, arm="left"):
-                            arx.step(act)
-                        arx._go_to_initial_pose()
-                        print(
-                            f"左臂执行完毕 pick={lp_pick.tolist()} place={lp_place.tolist()}")
-                    else:
-                        print("左臂缺少 pick/place 点，跳过。")
-
-                    if state["right_pick_ref"] is not None and state["right_place_ref"] is not None:
-                        rp_pick = state["right_pick_ref"]
-                        rp_place = state["right_place_ref"]
-                        for act in build_pick_straw_sequence(rp_pick, arm="right"):
-                            arx.step(act)
-                        for act in build_place_straw_sequence(rp_place, arm="right"):
-                            arx.step(act)
-                        arx._go_to_initial_pose()
-                        print(
-                            f"右臂执行完毕 pick={rp_pick.tolist()} place={rp_place.tolist()}")
-                    else:
-                        print("右臂缺少 pick/place 点，跳过。")
+                    try:
+                        cache_ref_points(depth)
+                        execute_arm("left")
+                        execute_arm("right")
+                    except ValueError as exc:
+                        print(f"执行失败：{exc}")
+                    finally:
+                        clear_state()
+                        print("已自动清点。")
         finally:
             arx._go_to_initial_pose()
             cv2.destroyAllWindows()
