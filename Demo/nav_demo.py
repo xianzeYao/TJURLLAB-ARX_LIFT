@@ -15,6 +15,7 @@ def main():
         # -- turn left pi/2 --
         arx_nav_robot.run_for_1s(chz=0.5, duration=20.6 / 2.0)
 
+
         # -- start point --
         arx_nav_robot.initialize_pose()
         color, depth = arx_nav_robot.get_color_depth()
@@ -26,7 +27,8 @@ def main():
         revised_points = []
     
         for (u, v) in points:
-            u += 120
+            u += 80
+            v += 30
             cv2.circle(
                 color,
                 center=(int(u), int(v)),
@@ -48,22 +50,25 @@ def main():
             Pw = arx_nav_robot.pixel_to_pw(point, depth)
             path_xy.append((Pw[0], Pw[1]))
 
-        print(path_xy[:5])
+        print(path_xy[:7])
 
-        arx_nav_robot.follow_path(path_xy[:5], lookahead=0.12, v_max=0.15, v_min=0.13, reach_dis=0.09, show_index=True)
+        arx_nav_robot.follow_path(path_xy[:7], lookahead=0.12, v_max=0.15, v_min=0.13, reach_dis=0.09, show_index=True)
 
         # time.sleep(10.0)
 
         # -- turn right --
         print("Turn right......")
         # arx_nav_robot.run_for_1s(chz=-1.0, duration=20.6 / 6.0)
-        points, detect_flag, color = arx_nav_robot.turn_right_until_see_goal(goal="red circular landmark on the ground", max_angle=math.pi/2.0)
-        if not detect_flag:
-            raise RuntimeError(f"未找到目标")
+        # points, detect_flag, color = arx_nav_robot.turn_right_until_see_goal(goal="red circular landmark on the ground", max_angle=math.pi/2.0)
+        # if not detect_flag:
+        #     raise RuntimeError(f"未找到目标")
         # arx_nav_robot.run_for_1s(chz=-0.5, duration=20.6 / 3.0)
 
         # color, depth = arx_nav_robot.get_color_depth()
         # points = arx_nav_robot.detect_goal(color)
+
+        color, depth = arx_nav_robot.get_color_depth()
+        points = arx_nav_robot.detect_goal(color, "red circular landmark on the ground")
 
         cv2.circle(
             color,
@@ -88,10 +93,10 @@ def main():
         # -- move to goal --
         for action, action_content in actions:
             if action == "forward":
-                arx_nav_robot.run_for_1s(chx=1.0, duration=(action_content)/0.24)
+                arx_nav_robot.run_for_1s(chx=1.0, duration=(action_content)/0.22)
             elif action == "rotate":
                 if action_content <= 0:
-                    arx_nav_robot.run_for_1s(chz=-0.5, duration=max(float((-action_content/(0.5 * 2*math.pi / 20.6))) - 1.0, 0.0))
+                    arx_nav_robot.run_for_1s(chz=-0.5, duration=max(float((-action_content/(0.5 * 2*math.pi / 20.6))) - 0.5, 0.0))
                 else:
                     arx_nav_robot.run_for_1s(chz=0.5, duration=action_content/(0.5 * 2*math.pi / 20.6))
 
@@ -113,11 +118,39 @@ def main():
         
 
         arx_nav_robot.run_for_1s(chz=-0.5, duration=20.6 / 2.5)
+
+        color, depth = arx_nav_robot.get_color_depth()
+        points = arx_nav_robot.detect_goal(color, "the grey round coaster on the table")
+        goal_pw = arx_nav_robot.pixel_to_pw(points[0], depth)
+        start = (0, 0)
+        goal = (goal_pw[0], -goal_pw[1])
+
+        path = [start, goal]
+        actions = path_to_actions(path)
+        actions = merge_forward_actions(actions)
+    
+        cv2.circle(
+            color,
+            center=(int(points[0][0]), int(points[0][1])),
+            radius=5,
+            color=(0, 0, 255),
+            thickness=-1  # -1 表示实心圆
+        )
+
+        cv2.imwrite("../Testdata4Nav/test_3.png", color)
+
+        for action, action_content in actions:
+            if action == "rotate":
+                if action_content <= 0:
+                    arx_nav_robot.run_for_1s(chz=-0.5, duration=max(float((-(action_content-0.5)/(0.5 * 2*math.pi / 20.6))), 0.0))
+                else:
+                    arx_nav_robot.run_for_1s(chz=0.5, duration=action_content/(0.5 * 2*math.pi / 20.6))
+
         # time.sleep(10.0)
         # -- turn right end--
 
         # foward a little
-        arx_nav_robot.run_for_1s(chx=0.5, duration=1.5)
+        arx_nav_robot.run_for_1s(chx=0.5, duration=2.2)
 
         # # -- turn right --
         # arx_nav_robot.run_for_1s(chz=-0.5, duration=(20.6 * 2.0) / 3.0)
@@ -144,7 +177,7 @@ def main():
         # arx_nav_robot.run_for_1s(chz=0.5, duration=20.6 / 2.0)
 
         # step back a little
-        arx_nav_robot.run_for_1s(chx=-0.5, duration=1.5)
+        arx_nav_robot.run_for_1s(chx=-0.5, duration=2.2)
 
         arx_nav_robot.run_for_1s(chz=-0.5, duration=20.6 - 20.6 / 2.5)
 
@@ -153,6 +186,8 @@ def main():
         arx_nav_robot.run_for_1s(chx=0.5, duration=2.5)
 
         arx_nav_robot.run_for_1s(chz=0.5, duration=10.3)
+
+        arx_nav_robot.run_for_1s(chx=0.5, duration=1.5)
 
         # -- put cup start --
 

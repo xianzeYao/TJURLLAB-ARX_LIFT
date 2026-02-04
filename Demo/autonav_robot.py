@@ -48,8 +48,8 @@ class AutoNav_Robot():
             min_steps_per_action=60,
             min_steps_gripper=20,
 
-            max_v_xyz=0.1,
-            max_v_rpy=0.1,
+            max_v_xyz=0.2,
+            max_v_rpy=0.2,
 
             camera_type=camera_type,
             camera_view=camera_view,
@@ -262,25 +262,16 @@ Is there a {goal} in the picture? If you think there is no {goal}, output 'False
     def turn_right_corner(self, color):
         prompt = """**Task**
 
-Given an image captured from a top-mounted robot camera, generate a smooth ground trajectory that moves the robot forward first and then makes a right turn toward the nearest table corner.
+Given an image captured from a top-mounted robot camera,Use 2D points to trace the movement trajectory as it moves.
 
 **Trajectory requirements**
 
-- Output **exactly 5 points** on the **ground (floor)** that form a single continuous trajectory.
+- Output **exactly 8 points** on the **ground (floor)** that form a single continuous trajectory.
 - The **first point** must be at the **bottom center of the image**, representing the robot’s current position.
-- The **last point** must be on the **ground at the table corner**, not on the table surface.
+- The last point must be located on the right image boundary, below the vertical midpoint.
 - The trajectory must represent **a clear forward motion first, followed by a right turn**.
 - The **first 2–3 points** should lie approximately on a **straight forward path** before any noticeable rightward deviation.
 - The right turn should **start later**, not immediately near the starting point.
-- The turn must be **smooth and gradual**, not abrupt.
-- Points must be **monotonically progressing forward** (no backward motion).
-
-**Coordinate system**
-
-- Use **image pixel coordinates**:
-    - x increases to the right
-    - y increases downward
-- All returned points must be inside the image bounds.
 Output format:
 Return the result in JSON format as:
 [
@@ -294,18 +285,19 @@ Return the result in JSON format as:
             base_url="http://172.28.102.11:22002/v1",
             model_name="Embodied-R1.5-SFT-0128",
             api_key="EMPTY",
+            temperature=0.2
             # assume_bgr=False
         )
 
         return points
     
-    def detect_goal(self, color):
-        prompt = """Provide one or more points coordinate of objects region this sentence describes: red circular landmark on the ground.
+    def detect_goal(self, color, goal):
+        prompt = """Provide one or more points coordinate of objects region this sentence describes: {goal}.
         Output format: Return the result in JSON format as:
         [ 
             {"point_2d": [x, y]}
         ]
-        """
+        """.replace("{goal}", goal)
 
         points = predict_multi_points_from_rgb(
                 color,
@@ -488,13 +480,15 @@ Return the result in JSON format as:
     def motion_inversion(self):
         # turn back
         # self.run_for_1s(chz=-0.5, duration=20.6)
+        # print(self.action_log)
         action_log = self.action_log[1:-5].copy()
+        action_log.append(self.action_log[-4])
         for chx, chy, chz, duration in reversed(action_log):
             # ignore still motion
             if abs(chx) < 1e-3 and abs(chz) < 1e-3:
                 continue
 
-            print((chx, chy, -chz, duration))
+            # print((chx, chy, -chz, duration))
             
             self.run_for_1s_return(chx, chy, -chz, duration)
 
