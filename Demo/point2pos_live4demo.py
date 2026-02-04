@@ -289,7 +289,7 @@ def main():
                     continue
                 if key == ord("e") and pt_ref is not None and not executed:
                     seq = build_pick_cup_sequence(
-                        pt_ref) if i % 2 == 0 else build_place_cup_sequence(pt_ref)
+                        pt_ref, arm="left") if i % 2 == 0 else build_place_cup_sequence(pt_ref, arm="left")
                     for act in seq:
                         arx.step(act)
                     if i % 2 == 1:

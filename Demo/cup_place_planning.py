@@ -266,14 +266,14 @@ def main():
                     print(
                         f"执行 pick 点 {current_pick_uv} -> {current_pick_ref.tolist()}"
                     )
-                    seq = build_pick_cup_sequence(current_pick_ref)
+                    seq = build_pick_cup_sequence(current_pick_ref, arm="left")
                     for act in seq:
                         arx.step(act)
                     current_pick_uv = None
                     current_pick_ref = None
                     i += 1
                 elif i % 2 == 1 and place_pt_ref is not None:
-                    seq = build_place_cup_sequence(place_pt_ref)
+                    seq = build_place_cup_sequence(place_pt_ref, arm="left")
                     for act in seq:
                         arx.step(act)
                     arx._go_to_initial_pose()

@@ -31,7 +31,7 @@ def main():
         # 得到XYZ
         pt_ref = pixel_to_ref_point(
             predicted_px, depth, K, T_cam2ref)
-        action_seq = build_pick_cup_sequence(pt_ref)
+        action_seq = build_pick_cup_sequence(pt_ref, arm="left")
         for act in action_seq:
             # print(act)
             arx_nav_robot.arx.step(act)
@@ -168,7 +168,7 @@ def main():
         # 得到XYZ
         pt_ref = pixel_to_ref_point(
             predicted_px, depth, K, T_cam2ref)
-        action_seq = build_place_cup_sequence(pt_ref)
+        action_seq = build_place_cup_sequence(pt_ref, arm="left")
         for act in action_seq:
             # print(act)
             arx_nav_robot.arx.step(act)
@@ -196,7 +196,7 @@ def main():
         # 得到XYZ
         pt_ref = pixel_to_ref_point(
             predicted_px, depth, K, T_cam2ref)
-        action_seq = build_pick_cup_sequence(pt_ref)
+        action_seq = build_pick_cup_sequence(pt_ref, arm="left")
         for act in action_seq:
             # print(act)
             arx_nav_robot.arx.step(act)
@@ -244,7 +244,7 @@ def main():
         # 得到XYZ
         pt_ref = pixel_to_ref_point(
             predicted_px, depth, K, T_cam2ref)
-        action_seq = build_place_cup_sequence(pt_ref)
+        action_seq = build_place_cup_sequence(pt_ref, arm="left")
         for act in action_seq:
             arx_nav_robot.arx.step(act)
         arx_nav_robot.arx._go_to_initial_pose()

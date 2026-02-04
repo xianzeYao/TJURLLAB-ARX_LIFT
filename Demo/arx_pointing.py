@@ -109,12 +109,13 @@ def predict_point_from_rgb(
     model_name: str = "Embodied-R1.5-SFT-0128",
     api_key: str = "EMPTY",
     assume_bgr: bool = True,
+    return_raw: bool = False,
     norm_range: float = 1000.0,
     temperature: float = 0.7,
     top_p: float = 0.8,
     seed: int = 3407,
     max_tokens: int = 512,
-) -> Tuple[float, float]:
+) -> Tuple[float, float] | Tuple[Optional[Tuple[float, float]], Optional[str]]:
     """
     发送单张图像到 vLLM/OpenAI 兼容接口，返回首个像素点坐标 (u, v)。
 
@@ -154,9 +155,12 @@ def predict_point_from_rgb(
         seed=seed,
     )
     generated = resp.choices[0].message.content
-
+    if not generated:
+        generated = None
     points = omni_decode_points(generated)
     if not points:
+        if return_raw:
+            return None, generated
         raise RuntimeError(f"未解析到坐标，模型输出: {generated}")
 
     pt = np.array(points[0], dtype=np.float64).reshape(-1)
@@ -168,6 +172,8 @@ def predict_point_from_rgb(
 
     pt[0] = float(np.clip(pt[0], 0, w - 1))
     pt[1] = float(np.clip(pt[1], 0, h - 1))
+    if return_raw:
+        return (float(pt[0]), float(pt[1])), generated
     return float(pt[0]), float(pt[1])
 
 
@@ -225,6 +231,8 @@ def predict_multi_points_from_rgb(
         seed=seed,
     )
     generated = resp.choices[0].message.content
+    if not generated:
+        generated = None
     points = omni_decode_points(generated)
     if not points and not return_raw:
         raise RuntimeError(f"未解析到坐标，模型输出: {generated}")

@@ -157,9 +157,9 @@ def main():
                     if state["left_pick_ref"] is not None and state["left_place_ref"] is not None:
                         lp_pick = state["left_pick_ref"]
                         lp_place = state["left_place_ref"]
-                        for act in build_pick_cup_sequence(lp_pick):
+                        for act in build_pick_cup_sequence(lp_pick, arm="left"):
                             arx.step(act)
-                        for act in build_place_cup_sequence(lp_place):
+                        for act in build_place_cup_sequence(lp_place, arm="left"):
                             arx.step(act)
                         arx._go_to_initial_pose()
                         print(
@@ -170,9 +170,9 @@ def main():
                     if state["right_pick_ref"] is not None and state["right_place_ref"] is not None:
                         rp_pick = state["right_pick_ref"]
                         rp_place = state["right_place_ref"]
-                        for act in build_pick_straw_sequence(rp_pick):
+                        for act in build_pick_straw_sequence(rp_pick, arm="right"):
                             arx.step(act)
-                        for act in build_place_straw_sequence(rp_place):
+                        for act in build_place_straw_sequence(rp_place, arm="right"):
                             arx.step(act)
                         arx._go_to_initial_pose()
                         print(
