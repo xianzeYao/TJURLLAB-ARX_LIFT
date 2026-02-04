@@ -20,14 +20,14 @@ def main():
         arx.reset()
         open_action = {
             "left":  np.array([0, 0, 0, -1.571, 0, 0, -3.4], dtype=np.float32,),
-            "right": np.array([0, 0, 0, -1.571, 0, 0, -3.4], dtype=np.float32),
+            "right": np.array([0, 0, 0, 1.571, 0, 0, -3.4], dtype=np.float32),
         }
         arx.step(open_action)
         print("请放取春联，10秒后开始夹取...")
         time.sleep(10.0)
         close_action = {
             "left":  np.array([0, 0, 0, -1.571, 0, 0, 0.0], dtype=np.float32,),
-            "right": np.array([0, 0, 0, -1.571, 0, 0, 0.0], dtype=np.float32),
+            "right": np.array([0, 0, 0, 1.571, 0, 0, 0.0], dtype=np.float32),
         }
         arx.step(close_action)
         arx.step_lift(18.0)
