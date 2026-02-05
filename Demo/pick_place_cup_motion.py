@@ -2,7 +2,7 @@ import numpy as np
 from typing import Dict, Optional
 
 CLOSE = 0.0
-OPEN = -2.9
+OPEN = -3.0
 GRIPPER_OFFSET = 0.15
 GRIPPER_CUP = -2.0
 Z_CUP = 0.08
@@ -51,7 +51,7 @@ def make_pick_stop_action(pt_ref: Optional[np.ndarray], arm: str) -> Dict[str, n
     """回撤一点抓回位置，抬高保证一个重力对抗，保持不动。"""
     base = np.zeros(3, dtype=np.float32) if pt_ref is None else pt_ref
     active = np.array(
-        [base[0] - GRIPPER_OFFSET, base[1],
+        [base[0] - GRIPPER_OFFSET-0.01, base[1],
          base[2] + Z_CUP, 0, 0, 0, GRIPPER_CUP],
         dtype=np.float32,
     )
@@ -116,7 +116,7 @@ def make_place_stop_action(pt_ref: Optional[np.ndarray], arm: str) -> Dict[str, 
     """回撤一点放置位置，保持不动。"""
     base = np.zeros(3, dtype=np.float32) if pt_ref is None else pt_ref
     active = np.array(
-        [base[0] - GRIPPER_OFFSET - 0.07, base[1],
+        [base[0] - GRIPPER_OFFSET - 0.06, base[1],
          base[2] + Z_CUP, 0, 0, 0, OPEN],
         dtype=np.float32,
     )

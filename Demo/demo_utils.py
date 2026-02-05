@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 import cv2
 import numpy as np
@@ -14,10 +14,23 @@ from pick_place_straw_motion import (
 )
 
 
-def extract_numbered_sentences(raw: Optional[str]) -> List[str]:
-    """提取形如 '1. xxx' / '2) xxx' / '3- xxx' 的编号句子（行内行间都可）。"""
+def _extract_cup_phrases(text: str) -> List[str]:
+    phrases: List[str] = []
+    seen = set()
+    for m in re.finditer(r"\b([A-Za-z]+(?:\s+[A-Za-z]+)*)\s+cup\b", text):
+        phrase = m.group(0).strip()
+        key = phrase.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        phrases.append(phrase)
+    return phrases
+
+
+def extract_numbered_sentences(raw: Optional[str]) -> Tuple[List[str], List[str]]:
+    """提取形如 '1. xxx' / '2) xxx' / '3- xxx' 的编号句子，并提取 'xx cup'。"""
     if not raw:
-        return []
+        return [], []
     # 去掉代码块包裹
     raw_clean = re.sub(
         r"```(?:json|python)?\n?(.*?)\n?```", r"\1", raw, flags=re.DOTALL
@@ -40,10 +53,12 @@ def extract_numbered_sentences(raw: Optional[str]) -> List[str]:
         if s not in seen:
             seen.add(s)
             uniq_steps.append(s)
-    return uniq_steps
+    cup_text = " ".join(uniq_steps) if uniq_steps else raw_clean
+    cups = _extract_cup_phrases(cup_text)
+    return uniq_steps, cups
 
 
-def do_replan(color_img: np.ndarray, planning_prompt: str) -> List[str]:
+def do_replan(color_img: np.ndarray, planning_prompt: str) -> Tuple[List[str], List[str]]:
     raw_result = predict_multi_points_from_rgb(
         color_img,
         text_prompt="",
@@ -57,11 +72,11 @@ def do_replan(color_img: np.ndarray, planning_prompt: str) -> List[str]:
     else:
         pick_answer_text = None
 
-    pick_plan = extract_numbered_sentences(pick_answer_text)
+    pick_plan, cups = extract_numbered_sentences(pick_answer_text)
     if not pick_plan:
         # 递归重试
         return do_replan(color_img=color_img, planning_prompt=planning_prompt)
-    return pick_plan
+    return pick_plan, cups
 
 
 def draw_text_lines(

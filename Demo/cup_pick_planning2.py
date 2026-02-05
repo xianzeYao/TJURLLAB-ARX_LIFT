@@ -44,7 +44,7 @@ def pick_planning(arx: ARXRobotEnv, reset_robot: bool = True, close_robot: bool 
                 cv2.waitKey(1)
                 continue
             # 调用 VLM 生成步骤
-            current_plan = do_replan(color, pick_prompt)
+            current_plan, _ = do_replan(color, pick_prompt)
 
             # --- 可视化：在图像上打印出规划结果供确认 ---
             vis_img = color.copy()

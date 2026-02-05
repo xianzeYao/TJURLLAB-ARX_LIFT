@@ -14,6 +14,26 @@ sys.path.append("../ARX_Realenv/ROS2")  # noqa
 from arx_ros2_env import ARXRobotEnv  # noqa
 
 
+def _predict_one_point(color: np.ndarray, base_prompt: str) -> Tuple[int, int]:
+    full_prompt = (
+        "Provide exactly one point coordinate of objects region this sentence describes: "
+        f"{base_prompt} "
+        'The answer should be presented in JSON format as follows: [{"point_2d": [x, y]}]. '
+        "Return only JSON."
+    )
+    points = predict_multi_points_from_rgb(
+        color,
+        text_prompt="",
+        all_prompt=full_prompt,
+        assume_bgr=False,
+        temperature=0.0,
+    )
+    if not points:
+        raise RuntimeError("未解析到坐标")
+    u, v = points[0]
+    return int(round(u)), int(round(v))
+
+
 def _predict_two_points(
     color: np.ndarray, pick_prompt: str, place_prompt: str
 ) -> Tuple[Tuple[int, int], Tuple[int, int]]:
@@ -39,7 +59,8 @@ def _predict_two_points(
 
 def _get_frame(arx: ARXRobotEnv) -> Tuple[np.ndarray, np.ndarray]:
     while True:
-        frames = arx.node.get_camera(target_size=(640, 480), return_status=False)
+        frames = arx.node.get_camera(
+            target_size=(640, 480), return_status=False)
         color = frames.get("camera_h_color")
         depth = frames.get("camera_h_aligned_depth_to_color")
         if color is None or depth is None:
@@ -56,37 +77,62 @@ def single_arm_pick_place(
     reset_robot: bool = True,
     close_robot: bool = True,
     confirm: bool = True,
+    debug: bool = True,
+    go_home: bool = True,
 ) -> Tuple[Optional[np.ndarray], Optional[np.ndarray]]:
     try:
         if reset_robot:
             arx.reset()
-        arx.step_lift(13.0)
 
         K = load_intrinsics()
         T_cam2ref = load_cam2ref(side=arm)
 
         while True:
+            confirm_now = confirm and debug
+            do_pick = bool(pick_prompt)
+            do_place = bool(place_prompt)
+            if not do_pick and not do_place:
+                raise ValueError("pick_prompt 和 place_prompt 不能同时为空")
+
             color, depth = _get_frame(arx)
-            pick_px, place_px = _predict_two_points(
-                color, pick_prompt, place_prompt
-            )
-            pick_ref = pixel_to_ref_point(pick_px, depth, K, T_cam2ref)
-            place_ref = pixel_to_ref_point(place_px, depth, K, T_cam2ref)
+            pick_px = None
+            place_px = None
+            if do_pick and do_place:
+                pick_px, place_px = _predict_two_points(
+                    color, pick_prompt, place_prompt
+                )
+            elif do_pick:
+                pick_px = _predict_one_point(color, pick_prompt)
+            else:
+                place_px = _predict_one_point(color, place_prompt)
+
+            pick_ref = None
+            place_ref = None
+            if pick_px is not None:
+                pick_ref = pixel_to_ref_point(pick_px, depth, K, T_cam2ref)
+            if place_px is not None:
+                place_ref = pixel_to_ref_point(place_px, depth, K, T_cam2ref)
 
             vis = color.copy()
-            cv2.circle(vis, pick_px, 5, (0, 0, 255), -1)
-            cv2.circle(vis, place_px, 5, (255, 0, 0), -1)
-            draw_text_lines(
-                vis,
-                [f"Pick: {pick_prompt}", f"Place: {place_prompt}"],
-                origin=(10, 25),
-                line_height=22,
-                color=(0, 0, 255),
-                scale=0.6,
-                thickness=2,
-            )
+            lines = []
+            if pick_px is not None:
+                cv2.circle(vis, pick_px, 5, (0, 0, 255), -1)
+                lines.append(f"Pick: {pick_prompt}")
+            if place_px is not None:
+                cv2.circle(vis, place_px, 5, (255, 0, 0), -1)
+                lines.append(f"Place: {place_prompt}")
+            if lines:
+                draw_text_lines(
+                    vis,
+                    lines,
+                    origin=(10, 25),
+                    line_height=22,
+                    color=(0, 0, 255),
+                    scale=0.6,
+                    thickness=2,
+                )
 
-            if confirm:
+            if confirm_now:
                 win = "single_arm_pick_place"
                 cv2.namedWindow(win, cv2.WINDOW_NORMAL)
                 cv2.imshow(win, vis)
@@ -104,9 +150,9 @@ def single_arm_pick_place(
                 pick_ref=pick_ref,
                 place_ref=place_ref,
                 arm=arm,
-                do_pick=True,
-                do_place=True,
-                go_home=True,
+                do_pick=do_pick,
+                do_place=do_place,
+                go_home=go_home,
             )
             return pick_ref, place_ref
     finally:

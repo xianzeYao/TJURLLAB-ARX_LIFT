@@ -19,6 +19,7 @@ sleep 1
 
 #left&right arm
 gnome-terminal -t "left&right" -x  bash -c "cd ${workspace}; cd .. ; cd ARX_X5/ROS2/X5_ws; source install/setup.bash && ros2 launch arx_x5_controller v2_double_arm.launch.py; exec bash;"
+# gnome-terminal -t "left" -x  bash -c "cd ${workspace}; cd .. ; cd ARX_X5/ROS2/X5_ws; source install/setup.bash && ros2 launch arx_x5_controller v2_single_arm.launch.py; exec bash;"
 
 # camera_h
 gnome-terminal -t "h_camera" -x  bash -c "cd ${workspace}; cd .. ; cd realsense; \

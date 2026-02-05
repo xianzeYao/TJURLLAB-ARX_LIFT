@@ -243,13 +243,15 @@ class AutoNav_Robot():
     def go_to_table(self):
         self.run_for_1s(chz=-0.5, duration=20.6 / 2.5)
 
-        self.arx.step_lift(20.0)
+        self.arx.step_lift(17.0)
 
         self.run_for_1s(chx=0.5, duration=2.2)
 
         color, depth = self.get_color_depth()
         points = self.detect_goal(color, "the brown round coaster on the table on the left")
         goal_pw = self.pixel_to_pw(points[0], depth)
+        goal_pw[0] += 0.25
+        goal_pw[1] -= 0.25
         start = (0, 0)
         goal = (goal_pw[0], -goal_pw[1])
 

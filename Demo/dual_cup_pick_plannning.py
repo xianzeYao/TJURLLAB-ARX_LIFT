@@ -10,7 +10,6 @@ from arx_pointing import predict_multi_points_from_rgb
 from demo_utils import (
     do_replan,
     draw_text_lines,
-    draw_point_label,
     execute_pick_place_cup_sequence,
 )
 
@@ -76,7 +75,7 @@ def _coaster_side_for_arm(arm: str) -> str:
 
 def _build_dual_prompt(step_text: str, arm: str) -> str:
     coaster_side = _coaster_side_for_arm(arm)
-    return f"Point out the {step_text} and the {coaster_side} of it."
+    return f"Point out the {step_text} and the nearest {coaster_side} of it and has no cup on it."
 
 
 def _predict_step(
@@ -131,7 +130,8 @@ def _execute_steps(
             if not step["skip_place"]:
                 if step["place_px"] is None:
                     raise ValueError("place 点缺失")
-                place_ref = pixel_to_ref_point(step["place_px"], depth, K, T_cam2ref)
+                place_ref = pixel_to_ref_point(
+                    step["place_px"], depth, K, T_cam2ref)
             execute_pick_place_cup_sequence(
                 arx=arx,
                 pick_ref=pick_ref,
@@ -139,7 +139,7 @@ def _execute_steps(
                 arm=step["arm"],
                 do_pick=True,
                 do_place=not step["skip_place"],
-                go_home=True,
+                go_home=step.get("go_home", True),
             )
         return True
     except ValueError as exc:
@@ -147,13 +147,12 @@ def _execute_steps(
         return False
 
 
-
-
-def dual_pick_planning(
+def dual_arm_pick_planning(
     arx: ARXRobotEnv,
     reset_robot: bool = True,
     close_robot: bool = True,
     no_last_place: bool = False,
+    goal: str = "red cup",
 ):
     try:
         if reset_robot:
@@ -166,7 +165,7 @@ def dual_pick_planning(
         step_idx = 0
         plan_steps: List[str] = []
 
-        goal_cup = "red cup"
+        goal_cup = goal
         planning_prompt = (
             f"Current Goal is: pick the {goal_cup}. "
             "I need to pick up the cups from top to the goal cup."
@@ -183,7 +182,7 @@ def dual_pick_planning(
                 cv2.waitKey(1)
                 continue
             # 调用 VLM 生成步骤
-            current_plan = do_replan(color, planning_prompt)
+            current_plan, _ = do_replan(color, planning_prompt)
 
             # --- 可视化：在图像上打印出规划 prompt 供确认 ---
             vis_img = color.copy()
@@ -235,7 +234,6 @@ def dual_pick_planning(
             win = "dual_cup_pick_planning"
             cv2.namedWindow(win, cv2.WINDOW_NORMAL)
 
-        cached_next = None
         while planned and step_idx < len(plan_steps):
             if step_idx != 0:
                 arx.step_lift(13.0)
@@ -249,28 +247,13 @@ def dual_pick_planning(
                 continue
 
             color = color.copy()
-            if cached_next is not None and cached_next["step_idx"] == step_idx:
-                current = cached_next
-                cached_next = None
-            else:
-                arm = _arm_for_step(step_idx)
-                pick_text = plan_steps[step_idx]
-                is_last = step_idx == len(plan_steps) - 1
-                skip_place = no_last_place and is_last
-                current = _predict_step(
-                    color, step_idx, pick_text, arm, skip_place
-                )
-
-                remaining = len(plan_steps) - step_idx
-                should_batch_two = remaining >= 2 and not (no_last_place and remaining == 2)
-                if should_batch_two and current["ok"]:
-                    next_arm = _arm_for_step(step_idx + 1)
-                    next_text = plan_steps[step_idx + 1]
-                    next_step = _predict_step(
-                        color, step_idx + 1, next_text, next_arm, False
-                    )
-                    if next_step["ok"]:
-                        cached_next = next_step
+            arm = _arm_for_step(step_idx)
+            pick_text = plan_steps[step_idx]
+            is_last = step_idx == len(plan_steps) - 1
+            skip_place = no_last_place and is_last
+            current = _predict_step(
+                color, step_idx, pick_text, arm, skip_place
+            )
 
             pick_px = current["pick_px"]
             place_px = current["place_px"]
@@ -278,29 +261,10 @@ def dual_pick_planning(
             arm = current["arm"]
             skip_place = current["skip_place"]
 
-            display_pairs = [
-                {
-                    "label": "1",
-                    "pick_px": pick_px,
-                    "place_px": place_px,
-                }
-            ]
-            if cached_next is not None and cached_next["step_idx"] == step_idx + 1:
-                display_pairs.append(
-                    {
-                        "label": "2",
-                        "pick_px": cached_next["pick_px"],
-                        "place_px": cached_next["place_px"],
-                    }
-                )
-
-            for pair in display_pairs:
-                if pair["pick_px"] is not None:
-                    cv2.circle(color, pair["pick_px"], 5, (0, 0, 255), -1)
-                    draw_point_label(color, pair["label"], pair["pick_px"])
-                if pair["place_px"] is not None:
-                    cv2.circle(color, pair["place_px"], 5, (255, 0, 0), -1)
-                    draw_point_label(color, pair["label"], pair["place_px"])
+            if pick_px is not None:
+                cv2.circle(color, pick_px, 5, (0, 0, 255), -1)
+            if place_px is not None:
+                cv2.circle(color, place_px, 5, (255, 0, 0), -1)
 
             prompt_lines = textwrap.wrap(dual_prompt, width=60)
             if skip_place:
@@ -319,7 +283,6 @@ def dual_pick_planning(
 
             key = cv2.waitKey(0)
             if key == ord("r"):
-                cached_next = None
                 continue
             if key == ord("n"):
                 break
@@ -327,56 +290,26 @@ def dual_pick_planning(
                 if pick_px is None:
                     print("当前未预测到足够点，按 r 重新预测。")
                     continue
-                exec_steps = [
-                    {
-                        "pick_px": pick_px,
-                        "place_px": place_px,
-                        "arm": arm,
-                        "skip_place": skip_place,
-                    }
-                ]
-                if cached_next is not None and cached_next["step_idx"] == step_idx + 1:
-                    exec_steps.append(
+                ok = _execute_steps(
+                    arx=arx,
+                    steps=[
                         {
-                            "pick_px": cached_next["pick_px"],
-                            "place_px": cached_next["place_px"],
-                            "arm": cached_next["arm"],
-                            "skip_place": cached_next["skip_place"],
+                            "pick_px": pick_px,
+                            "place_px": place_px,
+                            "arm": arm,
+                            "skip_place": skip_place,
+                            "go_home": not (no_last_place and is_last),
                         }
-                    )
-
-                try:
-                    for step in exec_steps:
-                        T_cam2ref = T_left if step["arm"] == "left" else T_right
-                        pick_ref = pixel_to_ref_point(
-                            step["pick_px"], depth, K, T_cam2ref
-                        )
-                        place_ref = None
-                        if not step["skip_place"]:
-                            if step["place_px"] is None:
-                                raise ValueError("place 点缺失")
-                            place_ref = pixel_to_ref_point(
-                                step["place_px"], depth, K, T_cam2ref
-                            )
-                        execute_pick_place_cup_sequence(
-                            arx=arx,
-                            pick_ref=pick_ref,
-                            place_ref=place_ref,
-                            arm=step["arm"],
-                            do_pick=True,
-                            do_place=not step["skip_place"],
-                            go_home=True,
-                        )
-                except ValueError as exc:
-                    cached_next = None
-                    print(f"像素/深度异常，重新预测：{exc}")
+                    ],
+                    depth=depth,
+                    K=K,
+                    T_left=T_left,
+                    T_right=T_right,
+                )
+                if not ok:
                     continue
 
-                if len(exec_steps) == 2:
-                    cached_next = None
-                    step_idx += 2
-                else:
-                    step_idx += 1
+                step_idx += 1
 
         if planned and step_idx >= len(plan_steps):
             print("全部步骤已完成。")
@@ -398,7 +331,7 @@ def main():
         camera_view=("camera_h",),
         img_size=(640, 480),
     )
-    dual_pick_planning(arx)
+    dual_arm_pick_planning(arx)
 
 
 if __name__ == "__main__":

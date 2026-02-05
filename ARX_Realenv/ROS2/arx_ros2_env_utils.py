@@ -343,9 +343,6 @@ def compute_interp_steps(curr_obs: Dict[str, np.ndarray],
         if diff_xyz < eps_xyz and diff_rpy < eps_rpy:
             pose_steps = 0
             pose_changed[side] = False
-        elif diff_xyz <= short_xyz and diff_rpy <= short_rpy:
-            pose_steps = 1
-            pose_changed[side] = True
         else:
             need_steps = [
                 int(np.ceil(diff_xyz / (max_v_xyz * duration_per_step))),
