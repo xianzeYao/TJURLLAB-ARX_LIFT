@@ -4,6 +4,14 @@ import termios
 import tty
 from typing import List, Tuple
 import math
+import re
+
+def extract_actions(instruction_str):
+    # Step 1: Use regular expression to extract lines that represent actions
+    action_lines = re.findall(r'\d+\.\s*(.*)', instruction_str)
+
+    # Step 2: Return the list of extracted actions
+    return action_lines
 
 def index_resample(points, num_points=25, gamma=1.8):
     """

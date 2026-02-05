@@ -1,68 +1,18 @@
 from __future__ import annotations
 
-import re
 from typing import List, Optional
 
 import cv2
 import numpy as np
 
-from pick_place_cup_motion import build_pick_cup_sequence, build_place_cup_sequence
 from point2pos_utils import load_cam2ref, load_intrinsics, pixel_to_ref_point
-from arx_pointing import predict_multi_points_from_rgb, predict_point_from_rgb
+from arx_pointing import predict_point_from_rgb
+from demo_utils import do_replan, execute_pick_place_cup_sequence
 
 import sys
 
 sys.path.append("../ARX_Realenv/ROS2")  # noqa
 from arx_ros2_env import ARXRobotEnv  # noqa
-
-
-def _extract_numbered_sentences(raw: Optional[str]) -> List[str]:
-    """提取形如 '1. xxx' / '2) xxx' / '3- xxx' 的编号句子（行内行间都可）。"""
-    if not raw:
-        return []
-    # 去掉代码块包裹
-    raw_clean = re.sub(
-        r"```(?:json|python)?\n?(.*?)\n?```", r"\1", raw, flags=re.DOTALL
-    )
-    steps: List[str] = []
-
-    # 行内 / 行间匹配：1. xxx 2) yyy 3- zzz
-    inline_matches = re.finditer(
-        r"(\d+)[\.\)\-]\s*(.+?)(?=(?:\d+[\.\)\-])|$)",
-        raw_clean,
-        flags=re.DOTALL,
-    )
-    for m in inline_matches:
-        steps.append(m.group(2).strip())
-
-    # 去重保持顺序
-    seen = set()
-    uniq_steps = []
-    for s in steps:
-        if s not in seen:
-            seen.add(s)
-            uniq_steps.append(s)
-    return uniq_steps
-
-
-def do_replan(color_img: np.ndarray, pick_prompt: str) -> List[str]:
-    raw_result = predict_multi_points_from_rgb(
-        color_img,
-        text_prompt="",
-        all_prompt=pick_prompt,
-        assume_bgr=False,
-        return_raw=True,
-        temperature=0.0
-    )
-    if isinstance(raw_result, tuple):
-        _, pick_answer_text = raw_result
-    else:
-        pick_answer_text = None
-
-    pick_plan = _extract_numbered_sentences(pick_answer_text)
-    if not pick_plan:
-        return do_replan(color_img=color_img, pick_prompt=pick_prompt)  # 递归重试
-    return pick_plan
 
 
 def pick_planning(arx: ARXRobotEnv, reset_robot: bool = True, close_robot: bool = True):
@@ -208,14 +158,25 @@ def pick_planning(arx: ARXRobotEnv, reset_robot: bool = True, close_robot: bool 
 
             if key == ord("e"):
                 if step_idx % 2 == 0:
-                    action_seq = build_pick_cup_sequence(pt_ref, arm="left")
-                    for act in action_seq:
-                        arx.step(act)
+                    execute_pick_place_cup_sequence(
+                        arx=arx,
+                        pick_ref=pt_ref,
+                        place_ref=None,
+                        arm="left",
+                        do_pick=True,
+                        do_place=False,
+                        go_home=False,
+                    )
                 else:
-                    action_seq = build_place_cup_sequence(pt_ref, arm="left")
-                    for act in action_seq:
-                        arx.step(act)
-                    arx._go_to_initial_pose()
+                    execute_pick_place_cup_sequence(
+                        arx=arx,
+                        pick_ref=None,
+                        place_ref=pt_ref,
+                        arm="left",
+                        do_pick=False,
+                        do_place=True,
+                        go_home=True,
+                    )
                 step_idx += 1
             if key == ord("n"):
                 break

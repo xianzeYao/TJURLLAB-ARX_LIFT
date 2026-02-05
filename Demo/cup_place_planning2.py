@@ -21,33 +21,19 @@ from collections import deque
 import cv2
 import numpy as np
 
-from pick_place_cup_motion import build_pick_cup_sequence, build_place_cup_sequence
-from point2pos_utils import load_cam2ref, load_intrinsics, pixel_to_ref_point
+from point2pos_utils import (
+    load_cam2ref,
+    load_intrinsics,
+    pixel_to_ref_point,
+    filter_valid_points,
+)
 from arx_pointing import predict_multi_points_from_rgb, predict_point_from_rgb
+from demo_utils import draw_text_lines, execute_pick_place_cup_sequence
 
 import sys
 
 sys.path.append("../ARX_Realenv/ROS2")  # noqa
 from arx_ros2_env import ARXRobotEnv  # noqa
-
-
-def _filter_valid_points(
-    uv_list: List[Tuple[int, int]],
-    depth: np.ndarray,
-    K: np.ndarray,
-    T_cam2ref: np.ndarray,
-) -> Tuple[List[Tuple[int, int]], List[np.ndarray]]:
-    """过滤深度无效的像素点并转换为 ref 坐标系 3D 点。"""
-    valid_uvs: List[Tuple[int, int]] = []
-    pt_refs: List[np.ndarray] = []
-    for uv in uv_list:
-        raw_depth = depth[uv[1], uv[0]]
-        if np.isnan(raw_depth) or raw_depth == 0:
-            print(f"预测像素 {uv} 深度无效({raw_depth})，跳过该点")
-            continue
-        pt_refs.append(pixel_to_ref_point(uv, depth, K, T_cam2ref))
-        valid_uvs.append(uv)
-    return valid_uvs, pt_refs
 
 
 def place_planning(arx: ARXRobotEnv, reset_robot: bool = True, close_robot: bool = True):
@@ -182,7 +168,7 @@ def place_planning(arx: ARXRobotEnv, reset_robot: bool = True, close_robot: bool
                         print(f"place 模型回答: {raw_text}")
                         uv_ints = [(int(round(u)), int(round(v)))
                                    for (u, v) in raw_uvs]
-                        valid_uvs, valid_refs = _filter_valid_points(
+                        valid_uvs, valid_refs = filter_valid_points(
                             uv_ints, depth_latest, K, T_cam2ref
                         )
                         if len(valid_uvs) < 2:
@@ -216,17 +202,15 @@ def place_planning(arx: ARXRobotEnv, reset_robot: bool = True, close_robot: bool
 
             curr_prompt = pick_prompt if i % 2 == 0 else current_place_prompt
             prompt_lines = textwrap.wrap(f"prompt: {curr_prompt}", width=32)
-            for idx, line in enumerate(prompt_lines):
-                cv2.putText(
-                    disp,
-                    line,
-                    (10, 25 + idx * 25),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.7,
-                    (0, 0, 255),
-                    2,
-                    cv2.LINE_AA,
-                )
+            draw_text_lines(
+                disp,
+                prompt_lines,
+                origin=(10, 25),
+                line_height=25,
+                color=(0, 0, 255),
+                scale=0.7,
+                thickness=2,
+            )
             cv2.imshow(win, disp)
             key = cv2.waitKey(1) & 0xFF
 
@@ -244,18 +228,29 @@ def place_planning(arx: ARXRobotEnv, reset_robot: bool = True, close_robot: bool
                     print(
                         f"执行 pick 点 {current_pick_uv} -> {current_pick_ref.tolist()}"
                     )
-                    seq = build_pick_cup_sequence(current_pick_ref, arm="left")
-                    for act in seq:
-                        arx.step(act)
+                    execute_pick_place_cup_sequence(
+                        arx=arx,
+                        pick_ref=current_pick_ref,
+                        place_ref=None,
+                        arm="left",
+                        do_pick=True,
+                        do_place=False,
+                        go_home=False,
+                    )
                     picked_cup.append(target)
                     current_pick_uv = None
                     current_pick_ref = None
                     i += 1
                 elif i % 2 == 1 and place_pt_ref is not None:
-                    seq = build_place_cup_sequence(place_pt_ref, arm="left")
-                    for act in seq:
-                        arx.step(act)
-                    arx._go_to_initial_pose()
+                    execute_pick_place_cup_sequence(
+                        arx=arx,
+                        pick_ref=None,
+                        place_ref=place_pt_ref,
+                        arm="left",
+                        do_pick=False,
+                        do_place=True,
+                        go_home=True,
+                    )
                     if len(picked_cup) >= 2 and i >= 7:
                         if i <= 8:
                             picked_cup.popleft()

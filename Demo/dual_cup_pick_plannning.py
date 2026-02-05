@@ -1,14 +1,18 @@
 from __future__ import annotations
 
-import re
 import textwrap
-from typing import List, Optional
+from typing import List
 
 import cv2
 
-from pick_place_cup_motion import build_pick_cup_sequence, build_place_cup_sequence
 from point2pos_utils import load_cam2ref, load_intrinsics, pixel_to_ref_point
 from arx_pointing import predict_multi_points_from_rgb
+from demo_utils import (
+    do_replan,
+    draw_text_lines,
+    draw_point_label,
+    execute_pick_place_cup_sequence,
+)
 
 import time
 import sys
@@ -17,70 +21,21 @@ sys.path.append("../ARX_Realenv/ROS2")  # noqa
 from arx_ros2_env import ARXRobotEnv  # noqa
 
 
-def _extract_numbered_sentences(raw: Optional[str]) -> List[str]:
-    """提取形如 '1. xxx' / '2) xxx' / '3- xxx' 的编号句子（行内行间都可）。"""
-    if not raw:
-        return []
-    # 去掉代码块包裹
-    raw_clean = re.sub(
-        r"```(?:json|python)?\n?(.*?)\n?```", r"\1", raw, flags=re.DOTALL
-    )
-    steps: List[str] = []
-
-    # 行内 / 行间匹配：1. xxx 2) yyy 3- zzz
-    inline_matches = re.finditer(
-        r"(\d+)[\.\)\-]\s*(.+?)(?=(?:\d+[\.\)\-])|$)",
-        raw_clean,
-        flags=re.DOTALL,
-    )
-    for m in inline_matches:
-        steps.append(m.group(2).strip())
-
-    # 去重保持顺序
-    seen = set()
-    uniq_steps = []
-    for s in steps:
-        if s not in seen:
-            seen.add(s)
-            uniq_steps.append(s)
-    return uniq_steps
-
-
-def do_replan(color_img: np.ndarray, planning_prompt: str) -> List[str]:
-    raw_result = predict_multi_points_from_rgb(
-        color_img,
-        text_prompt="",
-        all_prompt=planning_prompt,
-        assume_bgr=False,
-        return_raw=True,
-        temperature=0.0,
-    )
-    if isinstance(raw_result, tuple):
-        _, pick_answer_text = raw_result
-    else:
-        pick_answer_text = None
-
-    pick_plan = _extract_numbered_sentences(pick_answer_text)
-    if not pick_plan:
-        # 递归重试
-        return do_replan(color_img=color_img, planning_prompt=planning_prompt)
-    return pick_plan
-
-
 def _predict_pick_place_once(
     color: np.ndarray, base_prompt: str
 ) -> tuple[tuple[int, int], tuple[int, int]]:
     full_prompt = (
         "Provide exactly two points coordinate of the pick object and the place coaster this sentence describes: "
         f"{base_prompt} "
-        "First point is the object, second point is the coaster."
+        'The answer should be presented in JSON format as follows: [{"point_2d": [x, y]}]. '
+        "Return only JSON. First point is the object, second point is the coaster."
     )
     points = predict_multi_points_from_rgb(
         color,
         text_prompt="",
         all_prompt=full_prompt,
         assume_bgr=False,
-        temperature=0.5,
+        temperature=0.0,
     )
     if len(points) < 2:
         raise RuntimeError(f"未获取到足够点({len(points)}): {points}")
@@ -111,26 +66,87 @@ def _predict_pick_only(
     return pick
 
 
-def _draw_text_lines(
-    img: np.ndarray,
-    lines: List[str],
-    origin: tuple[int, int] = (10, 30),
-    line_height: int = 22,
-    color: tuple[int, int, int] = (0, 0, 255),
-    scale: float = 0.5,
-    thickness: int = 2,
-) -> None:
-    x, y = origin
-    for i, line in enumerate(lines):
-        cv2.putText(
-            img,
-            line,
-            (x, y + i * line_height),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            scale,
-            color,
-            thickness,
-        )
+def _arm_for_step(step_idx: int) -> str:
+    return "left" if step_idx % 2 == 0 else "right"
+
+
+def _coaster_side_for_arm(arm: str) -> str:
+    return "left coaster" if arm == "left" else "right coaster"
+
+
+def _build_dual_prompt(step_text: str, arm: str) -> str:
+    coaster_side = _coaster_side_for_arm(arm)
+    return f"Point out the {step_text} and the {coaster_side} of it."
+
+
+def _predict_step(
+    color: np.ndarray,
+    step_idx: int,
+    step_text: str,
+    arm: str,
+    skip_place: bool,
+) -> dict:
+    if skip_place:
+        dual_prompt = f"Point out the {step_text}."
+    else:
+        dual_prompt = _build_dual_prompt(step_text, arm)
+
+    result = {
+        "step_idx": step_idx,
+        "arm": arm,
+        "skip_place": skip_place,
+        "dual_prompt": dual_prompt,
+        "pick_px": None,
+        "place_px": None,
+        "ok": False,
+    }
+
+    try:
+        if skip_place:
+            result["pick_px"] = _predict_pick_only(color, dual_prompt)
+        else:
+            pick_px, place_px = _predict_pick_place_once(color, dual_prompt)
+            result["pick_px"] = pick_px
+            result["place_px"] = place_px
+        result["ok"] = True
+    except RuntimeError as exc:
+        print(f"预测失败，按 r 重试：{exc}")
+
+    return result
+
+
+def _execute_steps(
+    arx: ARXRobotEnv,
+    steps: list[dict],
+    depth: np.ndarray,
+    K: np.ndarray,
+    T_left: np.ndarray,
+    T_right: np.ndarray,
+) -> bool:
+    try:
+        for step in steps:
+            T_cam2ref = T_left if step["arm"] == "left" else T_right
+            pick_ref = pixel_to_ref_point(step["pick_px"], depth, K, T_cam2ref)
+            place_ref = None
+            if not step["skip_place"]:
+                if step["place_px"] is None:
+                    raise ValueError("place 点缺失")
+                place_ref = pixel_to_ref_point(step["place_px"], depth, K, T_cam2ref)
+            execute_pick_place_cup_sequence(
+                arx=arx,
+                pick_ref=pick_ref,
+                place_ref=place_ref,
+                arm=step["arm"],
+                do_pick=True,
+                do_place=not step["skip_place"],
+                go_home=True,
+            )
+        return True
+    except ValueError as exc:
+        print(f"像素/深度异常，重新预测：{exc}")
+        return False
+
+
 
 
 def dual_pick_planning(
@@ -172,7 +188,7 @@ def dual_pick_planning(
             # --- 可视化：在图像上打印出规划 prompt 供确认 ---
             vis_img = color.copy()
             prompt_lines = textwrap.wrap(planning_prompt, width=60)
-            _draw_text_lines(
+            draw_text_lines(
                 vis_img,
                 ["Planning Prompt:"] + prompt_lines,
                 origin=(10, 30),
@@ -219,6 +235,7 @@ def dual_pick_planning(
             win = "dual_cup_pick_planning"
             cv2.namedWindow(win, cv2.WINDOW_NORMAL)
 
+        cached_next = None
         while planned and step_idx < len(plan_steps):
             if step_idx != 0:
                 arx.step_lift(13.0)
@@ -232,36 +249,63 @@ def dual_pick_planning(
                 continue
 
             color = color.copy()
-            pick_text = plan_steps[step_idx]
-            arm = "left" if step_idx % 2 == 0 else "right"
-            is_last = step_idx == len(plan_steps) - 1
-            skip_place = no_last_place and is_last
-            if skip_place:
-                dual_prompt = f"Point out the {pick_text}."
-                try:
-                    pick_px = _predict_pick_only(color, dual_prompt)
-                except RuntimeError as exc:
-                    print(f"预测失败，按 r 重试：{exc}")
-                    pick_px = None
-                place_px = None
+            if cached_next is not None and cached_next["step_idx"] == step_idx:
+                current = cached_next
+                cached_next = None
             else:
-                coaster_side = "left coaster" if arm == "left" else "right coaster"
-                dual_prompt = f"{pick_text} and place on the {coaster_side} of it that has no cup on it."
-                try:
-                    pick_px, place_px = _predict_pick_place_once(
-                        color, dual_prompt)
-                except RuntimeError as exc:
-                    print(f"预测失败，按 r 重试：{exc}")
-                    pick_px, place_px = None, None
+                arm = _arm_for_step(step_idx)
+                pick_text = plan_steps[step_idx]
+                is_last = step_idx == len(plan_steps) - 1
+                skip_place = no_last_place and is_last
+                current = _predict_step(
+                    color, step_idx, pick_text, arm, skip_place
+                )
 
-            if pick_px is not None:
-                cv2.circle(color, pick_px, 5, (0, 0, 255), -1)
-            if place_px is not None:
-                cv2.circle(color, place_px, 5, (255, 0, 0), -1)
+                remaining = len(plan_steps) - step_idx
+                should_batch_two = remaining >= 2 and not (no_last_place and remaining == 2)
+                if should_batch_two and current["ok"]:
+                    next_arm = _arm_for_step(step_idx + 1)
+                    next_text = plan_steps[step_idx + 1]
+                    next_step = _predict_step(
+                        color, step_idx + 1, next_text, next_arm, False
+                    )
+                    if next_step["ok"]:
+                        cached_next = next_step
+
+            pick_px = current["pick_px"]
+            place_px = current["place_px"]
+            dual_prompt = current["dual_prompt"]
+            arm = current["arm"]
+            skip_place = current["skip_place"]
+
+            display_pairs = [
+                {
+                    "label": "1",
+                    "pick_px": pick_px,
+                    "place_px": place_px,
+                }
+            ]
+            if cached_next is not None and cached_next["step_idx"] == step_idx + 1:
+                display_pairs.append(
+                    {
+                        "label": "2",
+                        "pick_px": cached_next["pick_px"],
+                        "place_px": cached_next["place_px"],
+                    }
+                )
+
+            for pair in display_pairs:
+                if pair["pick_px"] is not None:
+                    cv2.circle(color, pair["pick_px"], 5, (0, 0, 255), -1)
+                    draw_point_label(color, pair["label"], pair["pick_px"])
+                if pair["place_px"] is not None:
+                    cv2.circle(color, pair["place_px"], 5, (255, 0, 0), -1)
+                    draw_point_label(color, pair["label"], pair["place_px"])
+
             prompt_lines = textwrap.wrap(dual_prompt, width=60)
             if skip_place:
                 prompt_lines = ["(no_last_place)"] + prompt_lines
-            _draw_text_lines(
+            draw_text_lines(
                 color,
                 [f"Step {step_idx + 1}/{len(plan_steps)} ({arm}):"] +
                 prompt_lines,
@@ -275,6 +319,7 @@ def dual_pick_planning(
 
             key = cv2.waitKey(0)
             if key == ord("r"):
+                cached_next = None
                 continue
             if key == ord("n"):
                 break
@@ -282,30 +327,56 @@ def dual_pick_planning(
                 if pick_px is None:
                     print("当前未预测到足够点，按 r 重新预测。")
                     continue
+                exec_steps = [
+                    {
+                        "pick_px": pick_px,
+                        "place_px": place_px,
+                        "arm": arm,
+                        "skip_place": skip_place,
+                    }
+                ]
+                if cached_next is not None and cached_next["step_idx"] == step_idx + 1:
+                    exec_steps.append(
+                        {
+                            "pick_px": cached_next["pick_px"],
+                            "place_px": cached_next["place_px"],
+                            "arm": cached_next["arm"],
+                            "skip_place": cached_next["skip_place"],
+                        }
+                    )
+
                 try:
-                    T_cam2ref = T_left if arm == "left" else T_right
-                    pick_ref = pixel_to_ref_point(pick_px, depth, K, T_cam2ref)
-                    place_ref = None
-                    if not skip_place:
-                        if place_px is None:
-                            print("当前未预测到 place 点，按 r 重新预测。")
-                            continue
-                        place_ref = pixel_to_ref_point(
-                            place_px, depth, K, T_cam2ref)
+                    for step in exec_steps:
+                        T_cam2ref = T_left if step["arm"] == "left" else T_right
+                        pick_ref = pixel_to_ref_point(
+                            step["pick_px"], depth, K, T_cam2ref
+                        )
+                        place_ref = None
+                        if not step["skip_place"]:
+                            if step["place_px"] is None:
+                                raise ValueError("place 点缺失")
+                            place_ref = pixel_to_ref_point(
+                                step["place_px"], depth, K, T_cam2ref
+                            )
+                        execute_pick_place_cup_sequence(
+                            arx=arx,
+                            pick_ref=pick_ref,
+                            place_ref=place_ref,
+                            arm=step["arm"],
+                            do_pick=True,
+                            do_place=not step["skip_place"],
+                            go_home=True,
+                        )
                 except ValueError as exc:
+                    cached_next = None
                     print(f"像素/深度异常，重新预测：{exc}")
                     continue
 
-                pick_seq = build_pick_cup_sequence(pick_ref, arm=arm)
-                for act in pick_seq:
-                    arx.step(act)
-                if not skip_place and place_ref is not None:
-                    place_seq = build_place_cup_sequence(place_ref, arm=arm)
-                    for act in place_seq:
-                        arx.step(act)
-                arx._go_to_initial_pose()
-
-                step_idx += 1
+                if len(exec_steps) == 2:
+                    cached_next = None
+                    step_idx += 2
+                else:
+                    step_idx += 1
 
         if planned and step_idx >= len(plan_steps):
             print("全部步骤已完成。")

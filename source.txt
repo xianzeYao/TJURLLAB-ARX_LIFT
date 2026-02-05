@@ -42,3 +42,19 @@ planning_pick_prompt = """Given an RGB image, output the minimal sequence of cup
 plannig_place_prompt = """"1. Point to top of the xxx cup.
                            2. Point to top of the xxx cup.
                            - Output the pixel coordinates of the center points."""
+
+# 录制bag并转换为视频
+ros2 bag record -o cam_bag --topics \
+  /camera_r_namespace/camera_r/color/image_rect_raw \
+  /camera_l_namespace/camera_l/color/image_rect_raw \
+  /camera_h_namespace/camera_h/color/image_rect_raw
+
+# 先脚本后回放
+
+python bag_to_mp4.py --topics \
+  /camera_r_namespace/camera_r/color/image_rect_raw \
+  /camera_l_namespace/camera_l/color/image_rect_raw \
+  /camera_h_namespace/camera_h/color/image_rect_raw \
+  --out_dir mp4_out --fps 30
+
+ros2 bag play cam_bag

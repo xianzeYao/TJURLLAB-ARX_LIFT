@@ -1,4 +1,4 @@
-from nav_utils import depth_to_meters, get_key
+from nav_utils import depth_to_meters, get_key, extract_actions, merge_forward_actions, path_to_actions
 # from qwen3_vl_8b_tool import predict_point_from_rgb
 from arx_pointing import predict_multi_points_from_rgb
 
@@ -7,10 +7,13 @@ import threading
 import time
 import math
 from pathlib import Path
+import cv2
 
 from arm_control.msg._pos_cmd import PosCmd
 
 import sys
+import select
+import termios
 sys.path.append("../ARX_Realenv/ROS2")  # noqa
 
 from arx_ros2_env import ARXRobotEnv
@@ -71,9 +74,9 @@ class AutoNav_Robot():
         self.dt = 0.05
 
         # -------- emergency stop ------
-        self.running = True
+        # self.running = True
         self.kb_thread = threading.Thread(
-            target=self.keyboard_listener,
+            target=self._safe_key_listener,
             daemon=True
         )
         self.kb_thread.start()
@@ -136,8 +139,10 @@ class AutoNav_Robot():
     def stop(self):
         msg = PosCmd()
         msg.chx = msg.chy = msg.chz = 0.0
+        base_status = self.arx.node.get_robot_status().get("base")
+        msg.height = float(
+            base_status.height) if base_status is not None else 0.0
         msg.mode1 = 2
-        msg.height = self.default_height
         self.arx.node.send_base_msg(msg)
 
     def run_for_1s(self, chx=0.0, chy=0.0, chz=0.0, duration=1.0, record=True):
@@ -148,7 +153,9 @@ class AutoNav_Robot():
         msg.chx = chx
         msg.chy = chy
         msg.chz = chz
-        msg.height = self.default_height
+        base_status = self.arx.node.get_robot_status().get("base")
+        msg.height = float(
+            base_status.height) if base_status is not None else 0.0
         msg.mode1 = 1
         self.arx.node.send_base_msg(msg)
 
@@ -166,8 +173,10 @@ class AutoNav_Robot():
         msg.chx = chx
         msg.chy = chy
         msg.chz = chz
-        msg.height = self.default_height
         msg.mode1 = 1
+        base_status = self.arx.node.get_robot_status().get("base")
+        msg.height = float(
+            base_status.height) if base_status is not None else 0.0
         self.arx.node.send_base_msg(msg)
         start_time = time.time()
 
@@ -180,19 +189,109 @@ class AutoNav_Robot():
                 a = 1
             return
 
+    def nav_plan(self, user_instruction):
+        correct_flag = False
+        prompt = f"""
+        You are a robot motion planner. Current goal: {user_instruction}
+        ### Instruction Rules:
+        1. **Task Categories:** Every step must strictly start with the word **Turn** or **Move**.
+        2. **Decomposition Logic:** - To "Go around the left side," you must first Turn Left, then Move Forward-Right to clear the obstacle and see the target.
+        ### Output Format:
+        1. [Action]: [Brief Description]
+        2. ...
+        Please give me the remaining 5 step.
+        """
+        while not correct_flag:
+            color, depth = self.get_color_depth()
+
+            _, generated_content = predict_multi_points_from_rgb(
+                color,
+                text_prompt="",
+                all_prompt=prompt,
+                base_url="http://172.28.102.11:22002/v1",
+                model_name="Embodied-R1.5-SFT-0128",
+                api_key="EMPTY",
+                assume_bgr=False,
+                return_raw=True
+            )
+
+            print(generated_content)
+
+            actions = extract_actions(generated_content)
+
+            print(actions)
+
+            if actions == ['Turn Left', 'Move Forward-Right', 'Adjust Position to Face Red Dot', 'Move Directly Toward Red Dot', 'Turn Right to Face Bubble Tea Preparation Area']:
+                correct_flag = True
+
+        for action in actions:
+            if action == 'Turn Left':
+                self.turn_left(math.pi / 2.0)
+            elif action == 'Move Forward-Right':
+                self.turn_right_corner()
+            elif action == 'Adjust Position to Face Red Dot':
+                self.run_for_1s(chz=-0.5, duration=20.6/6.0)
+                self.go_to_goal("center of red circular landmark on the ground")
+            elif action.startswith("Turn Right"):
+                self.go_to_table()
+
+    def turn_left(self, angle):
+        print(f"Turn left {angle}°......")
+        duration_time = 20.6 * float(angle / math.pi)
+        self.run_for_1s(chz=0.5, duration=duration_time)
+
+    def go_to_table(self):
+        self.run_for_1s(chz=-0.5, duration=20.6 / 2.5)
+
+        self.arx.step_lift(20.0)
+
+        self.run_for_1s(chx=0.5, duration=2.2)
+
+        color, depth = self.get_color_depth()
+        points = self.detect_goal(color, "the brown round coaster on the table on the left")
+        goal_pw = self.pixel_to_pw(points[0], depth)
+        start = (0, 0)
+        goal = (goal_pw[0], -goal_pw[1])
+
+        path = [start, goal]
+        actions = path_to_actions(path)
+        actions = merge_forward_actions(actions)
+    
+        cv2.circle(
+            color,
+            center=(int(points[0][0]), int(points[0][1])),
+            radius=5,
+            color=(0, 0, 255),
+            thickness=-1  # -1 表示实心圆
+        )
+
+        cv2.imwrite("../Testdata4Nav/test_3.png", color)
+
+        for action, action_content in actions:
+            if action == "rotate":
+                if action_content <= 0:
+                    self.run_for_1s(chz=-0.5, duration=max(float((-(action_content)/(0.5 * 2*math.pi / 20.6))), 0.0))
+                else:
+                    self.run_for_1s(chz=0.5, duration=action_content/(0.5 * 2*math.pi / 20.6))
+
+        # time.sleep(10.0)
+        # -- turn right end--
+
+        # foward a little
+        # self.run_for_1s(chx=0.5, duration=2.2)
+    
     # intelligent turn right
     def turn_right_until_see_goal(self, goal, max_angle):
         # start_turn_right
         msg = PosCmd()
         msg.chx = 0.0
         msg.chy = 0.0
-        msg.chz = -0.5
-        msg.height = self.default_height
+        msg.chz = -0.3
         msg.mode1 = 1
         self.arx.node.send_base_msg(msg)
         start_time = time.time()
 
-        max_turn_time = max_angle / (0.2 * (2 * math.pi / 20.6))
+        max_turn_time = max_angle / (0.6 * math.pi / 20.6)
 
 #         detect_prompt = """Is there {goal}? If you think there is, ouput the point coordinates on the center of it; if you think there is not, the output point coordinates should be (1000, 1000).
 #         Output format:
@@ -231,6 +330,8 @@ Is there a {goal} in the picture? If you think there is no {goal}, output 'False
                 return_raw=True
             )
 
+            print(generated_content)
+
             if generated_content == "True":
                 break
         
@@ -247,7 +348,9 @@ Is there a {goal} in the picture? If you think there is no {goal}, output 'False
                 assume_bgr=False
             )
 
-            if points[0][0] > w / 3.0 and points[0][0] < (w * 2.0) / 3.0:
+            print(points[0][0])
+
+            if points[0][0] > w / 4.0 and points[0][0] < (w * 3.0) / 4.0:
                 print(points[0])
                 self.action_log.append((0.0, 0.0, -0.5, time.time() - start_time))
                 detect_flag = True
@@ -255,11 +358,24 @@ Is there a {goal} in the picture? If you think there is no {goal}, output 'False
         self.stop()
         if not detect_flag:
             self.action_log.append((0.0, 0.0, -0.5, time.time() - start_time))
+
+        cv2.circle(
+            color,
+            center=(int(points[0][0]), int(points[0][1])),
+            radius=5,
+            color=(0, 0, 255),
+            thickness=-1  # -1 表示实心圆
+        )
+
+        cv2.imwrite("../Testdata4Nav/test_2.png", color)
         
         return points, detect_flag, color
 
 
-    def turn_right_corner(self, color):
+    def turn_right_corner(self):
+        print("Turn right corner......")
+        self.initialize_pose()
+        color, depth = self.get_color_depth()
         prompt = """**Task**
 
 Given an image captured from a top-mounted robot camera,Use 2D points to trace the movement trajectory as it moves.
@@ -289,9 +405,40 @@ Return the result in JSON format as:
             # assume_bgr=False
         )
 
-        return points
+        order_num = 0.0
+
+        revised_points = []
     
-    def detect_goal(self, color, goal):
+        for (u, v) in points:
+            u += 80
+            v += 30
+            cv2.circle(
+                color,
+                center=(int(u), int(v)),
+                radius=5,
+                color=(order_num, order_num, 255 - order_num),
+                thickness=-1  # -1 表示实心圆
+            )
+            order_num += 30
+            revised_points.append((u, v))
+
+        cv2.imwrite("../Testdata4Nav/test_1.png", color)
+
+        path_xy = []
+
+        # -- pixel to wolrd point --
+        for point in revised_points:
+            Pw = self.pixel_to_pw(point, depth)
+            path_xy.append((Pw[0], Pw[1]))
+
+        print(path_xy[:7])
+
+        self.follow_path(path_xy[:7], lookahead=0.12, v_max=0.15, v_min=0.13, reach_dis=0.09, show_index=True)
+
+    
+    def go_to_goal(self, goal):
+        print(f"Go to goal {goal}......")
+        color, depth = self.get_color_depth()
         prompt = """Provide one or more points coordinate of objects region this sentence describes: {goal}.
         Output format: Return the result in JSON format as:
         [ 
@@ -306,6 +453,53 @@ Return the result in JSON format as:
                 base_url="http://172.28.102.11:22002/v1",
                 model_name="Embodied-R1.5-SFT-0128",
                 api_key="EMPTY",
+                assume_bgr=False
+            )
+
+        cv2.circle(
+            color,
+            center=(int(points[0][0]), int(points[0][1])),
+            radius=5,
+            color=(0, 0, 255),
+            thickness=-1  # -1 表示实心圆
+        )
+
+        cv2.imwrite("../Testdata4Nav/test_2.png", color)
+
+        goal_pw = self.pixel_to_pw(points[0], depth)
+        start = (0, 0)
+        goal = (goal_pw[0], -goal_pw[1])
+
+        path = [start, goal]
+        actions = path_to_actions(path)
+        actions = merge_forward_actions(actions)
+
+        # -- move to goal --
+        for action, action_content in actions:
+            if action == "forward":
+                self.run_for_1s(chx=1.0, duration=(action_content)/0.23)
+            elif action == "rotate":
+                if action_content <= 0:
+                    self.run_for_1s(chz=-0.5, duration=max(float((-action_content/(0.5 * 2*math.pi / 20.6))) - 0.5, 0.0))
+                else:
+                    self.run_for_1s(chz=0.5, duration=action_content/(0.5 * 2*math.pi / 20.6))
+
+    def detect_goal(self, color, goal):
+        prompt = """Provide one point coordinate of object region this sentence describes: {goal}.
+        Output format: Return the result in JSON format as:
+        [ 
+            {"point_2d": [x, y]}
+        ]
+        """.replace("{goal}", goal)
+
+        points = predict_multi_points_from_rgb(
+                color,
+                text_prompt="",
+                all_prompt=prompt,
+                base_url="http://172.28.102.11:22002/v1",
+                model_name="Embodied-R1.5-SFT-0128",
+                api_key="EMPTY",
+                assume_bgr=False
             )
 
         return points
@@ -380,7 +574,6 @@ Return the result in JSON format as:
                 # self.running = False
                 self.stop()
                 break
-
     
     # compute pose
     def initialize_pose(self):
@@ -463,7 +656,9 @@ Return the result in JSON format as:
             msg = PosCmd()
             msg.chx = math.sqrt(v / 0.24)          # 前后速度
             msg.chz = omega / (2 * math.pi / 20.6) # 正数向左
-            msg.height = self.default_height
+            base_status = self.arx.node.get_robot_status().get("base")
+            msg.height = float(
+                base_status.height) if base_status is not None else 0.0
             msg.mode1 = 1
             self.arx.node.send_base_msg(msg)
             self.action_log.append((msg.chx, msg.chy, msg.chz, rate))
@@ -494,6 +689,29 @@ Return the result in JSON format as:
 
             if not self.running:
                 break
+
+    def _safe_key_listener(self):
+        """
+        safe key listener
+        """
+        fd = sys.stdin.fileno()
+        old_settings = termios.tcgetattr(fd)
+
+        try:
+            while self.running:
+                # 0.05s 超时轮询，不阻塞主线程
+                rlist, _, _ = select.select([sys.stdin], [], [], 0.05)
+                if rlist:
+                    ch = sys.stdin.read(1)
+                    if ch == 'q':
+                        print("\n[Emergency Stop] 'q' pressed.")
+                        self.running = False
+                        self.stop()
+                        self.arx.close()
+                        break
+        finally:
+            # 🔒 确保退出时终端状态恢复
+            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
 
 
 
