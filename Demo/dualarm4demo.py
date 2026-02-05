@@ -145,8 +145,8 @@ def main():
                 place_seq = build_place_cup_sequence(place_ref, arm="left")
                 arm_desc = "左臂(杯子)"
             else:
-                pick_seq = build_pick_straw_sequence(pick_ref, arm="right")
-                place_seq = build_place_straw_sequence(place_ref, arm="right")
+                pick_seq = build_pick_cup_sequence(pick_ref, arm="right")
+                place_seq = build_place_cup_sequence(place_ref, arm="right")
                 arm_desc = "右臂(杯子)"
 
             for act in pick_seq:
