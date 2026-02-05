@@ -279,11 +279,11 @@ def build_observation(
             obs["base_height"] = np.array(
                 [base_status.height], dtype=np.float32)
             obs["base_wheel1"] = np.array(
-                [base_status.temp_float_data[1]], dtype=np.float32) #后轮
+                [base_status.temp_float_data[1]], dtype=np.float32)  # 后轮
             obs["base_wheel2"] = np.array(
-                [base_status.temp_float_data[2]], dtype=np.float32) #右前
+                [base_status.temp_float_data[2]], dtype=np.float32)  # 右前
             obs["base_wheel3"] = np.array(
-                [base_status.temp_float_data[3]], dtype=np.float32) #左前
+                [base_status.temp_float_data[3]], dtype=np.float32)  # 左前
     if include_camera:
         # Attach camera frames as numpy arrays
         for key, msg in (camera_all or {}).items():
@@ -320,6 +320,13 @@ def compute_interp_steps(curr_obs: Dict[str, np.ndarray],
     """
     steps_by_side: Dict[str, tuple[int, int]] = {}
     pose_changed: Dict[str, bool] = {}
+    # Small-move deadband and short-move single-step thresholds.
+    # Units: xyz in meters, rpy in radians, gripper in raw units.
+    eps_xyz = 5e-4
+    eps_rpy = 5e-4
+    eps_grip = 5e-4
+    short_xyz = max_v_xyz * duration_per_step
+    short_rpy = max_v_rpy * duration_per_step
     for side in ("left", "right"):
         target = action.get(side)
         curr_end = curr_obs.get(f"{side}_end_pos")
@@ -331,17 +338,28 @@ def compute_interp_steps(curr_obs: Dict[str, np.ndarray],
         target_arr = target if isinstance(
             target, np.ndarray) else np.array(target, dtype=np.float32)
         diff = np.abs(target_arr - start)
-        need_steps = [
-            int(np.ceil(diff[:3].max() / (max_v_xyz * duration_per_step))),
-            int(np.ceil(diff[3:6].max() / (max_v_rpy * duration_per_step))),
-        ]
-        pose_steps = max(min_steps_per_action, max(need_steps))
-        pose_changed[side] = bool(np.any(diff[:6] > 1e-6))
+        diff_xyz = float(diff[:3].max())
+        diff_rpy = float(diff[3:6].max())
+        if diff_xyz < eps_xyz and diff_rpy < eps_rpy:
+            pose_steps = 0
+            pose_changed[side] = False
+        elif diff_xyz <= short_xyz and diff_rpy <= short_rpy:
+            pose_steps = 1
+            pose_changed[side] = True
+        else:
+            need_steps = [
+                int(np.ceil(diff_xyz / (max_v_xyz * duration_per_step))),
+                int(np.ceil(diff_rpy / (max_v_rpy * duration_per_step))),
+            ]
+            pose_steps = max(min_steps_per_action, max(need_steps))
+            pose_changed[side] = True
 
         grip_steps = 0
         delta_g = diff[6]
         if delta_g > 0:
-            if delta_g <= 1e-3:
+            if delta_g <= eps_grip:
+                grip_steps = 0
+            elif delta_g <= 1e-3:
                 grip_steps = 1
             else:
                 grip_steps = max(min_steps_gripper, max(1, pose_steps // 3))

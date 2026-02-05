@@ -3,6 +3,9 @@
 - 利用 ARXRobotEnv._get_observation() 同步取相机帧和末端姿态
 - 每次按回车保存一组：camera.png（RGB） + meta.json(end_pos)
 - 进入重力模式便于手拖动末端采样
+
+约定：
+end_pos 使用“初始法兰固定帧 R0”作为参考系（固定坐标系）。
 """
 from __future__ import annotations
 

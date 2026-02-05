@@ -53,7 +53,7 @@ def main():
                       camera_view=("camera_h",),
                       img_size=(640, 480))
     arx.reset()
-    arx.step_lift(15.0)
+    arx.step_lift(14.0)
 
     if args.debug:
         windows = {
@@ -61,8 +61,8 @@ def main():
             "right": "dualarm_right",
         }
         views = {
-            "left": {"title": "Left: cup ", "T": T_left},
-            "right": {"title": "Right: straw ", "T": T_right},
+            "left": {"title": "Left ", "T": T_left},
+            "right": {"title": "Right", "T": T_right},
         }
         state = {
             "left": {"pick_px": None, "place_px": None, "pick_ref": None, "place_ref": None},

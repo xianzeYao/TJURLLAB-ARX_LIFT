@@ -2,8 +2,11 @@
 基于 collect_calibration.py 采集的数据：仅做数据提取与角点识别，不做 hand-eye 求解与可视化。
 
 使用前提：
-- 样本是单张 RGB 图 + end_pos（相对于 ref 坐标系），棋盘规格由参数指定
+- 样本是单张 RGB 图 + end_pos（相对于固定 ref 坐标系），棋盘规格由参数指定
 - 相机内参通过 JSON/XML 提供
+
+约定：
+end_pos 使用“初始法兰固定帧 R0”作为参考系（固定坐标系）。
 """
 from __future__ import annotations
 
@@ -158,7 +161,7 @@ def draw_axes_bgr(
 def ref_gripper_transforms(end_pos: Iterable[float]) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     返回 (R_g2ref, t_g2ref, R_ref2g, t_ref2g)。
-    end_pos 记录的是“gripper 在 ref 下的位姿”（常见的基坐标系下末端姿态），因此需要取逆得到 gripper->ref。
+    end_pos 记录的是“gripper 在 ref 下的位姿”（这里 ref 为固定 R0），因此需要取逆得到 gripper->ref。
     """
     pose = np.asarray(end_pos, dtype=np.float64).flatten()
     R_ref2g = rpy_to_matrix(pose[3], pose[4], pose[5])
