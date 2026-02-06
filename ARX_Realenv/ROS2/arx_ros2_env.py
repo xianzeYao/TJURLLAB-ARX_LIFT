@@ -47,14 +47,16 @@ class ARXRobotEnv():
             observation (Dict[str, np.ndarray]): The initial state of the robot.
         """
         time.sleep(2.5)
-        # 1. Stop the base and lift the base to a safe height
-        self.step_lift(0.0)
-        self.step_base(0.0, 0.0, 0.0, 0.5)
-        # 2. Go to the initial pose
+        # 1. Go to the initial pose
         success, error_message = self._go_to_initial_pose()
         if not success:
             raise RuntimeError(
                 f"Failed to go to the initial pose: {error_message}")
+
+        # 2. Stop the base and lift the base to a safe height
+        self.step_lift(0.0)
+        
+        self.step_base(0.0, 0.0, 0.0, 0.5)
 
         # 3. Get the initial observation
         obs = self.get_observation()
