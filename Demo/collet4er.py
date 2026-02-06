@@ -106,7 +106,7 @@ def main() -> None:
     parser.add_argument("--img-w", type=int, default=640)
     parser.add_argument("--img-h", type=int, default=480)
     parser.add_argument("--height-step", type=float,
-                        default=0.2, help="每次调高/调低的高度步长")
+                        default=0.5, help="每次调高/调低的高度步长")
     parser.add_argument("--height-min", type=float, default=0.0)
     parser.add_argument("--height-max", type=float, default=20.0)
     parser.add_argument("--skip-home", action="store_true", help="不执行 reset()")

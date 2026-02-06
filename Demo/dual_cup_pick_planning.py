@@ -1,20 +1,20 @@
 from __future__ import annotations
-
-import textwrap
-from typing import List
-
-import cv2
-
-from point2pos_utils import load_cam2ref, load_intrinsics, pixel_to_ref_point
-from arx_pointing import predict_multi_points_from_rgb
+import sys
+import time
 from demo_utils import (
     do_replan,
     draw_text_lines,
     execute_pick_place_cup_sequence,
 )
+from arx_pointing import predict_multi_points_from_rgb
+from point2pos_utils import load_cam2ref, load_intrinsics, pixel_to_ref_point
 
-import time
-import sys
+import textwrap
+from typing import List
+
+import cv2
+import numpy as np
+
 
 sys.path.append("../ARX_Realenv/ROS2")  # noqa
 from arx_ros2_env import ARXRobotEnv  # noqa
@@ -159,6 +159,7 @@ def dual_arm_pick_planning(
         if reset_robot:
             arx.reset()
         arx.step_lift(16.0)
+        time.sleep(1.0)
         K = load_intrinsics()
         T_left, T_right = load_cam2ref()
 
@@ -237,8 +238,8 @@ def dual_arm_pick_planning(
 
         while planned and step_idx < len(plan_steps):
             if step_idx != 0:
-                arx.step_lift(13.0)
-                time.sleep(1.5)
+                arx.step_lift(13.5)
+                time.sleep(1.0)
             frames = arx.node.get_camera(
                 target_size=(640, 480), return_status=False)
             color = frames.get("camera_h_color")

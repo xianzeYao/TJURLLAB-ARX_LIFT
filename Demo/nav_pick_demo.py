@@ -59,7 +59,7 @@ def main():
             arx_nav_robot.arx,
             arm="left",
             pick_prompt="",
-            place_prompt="the center of the brown coaster",
+            place_prompt="the center of the empty coaster",
             reset_robot=False,
             close_robot=False,
             debug=False,
