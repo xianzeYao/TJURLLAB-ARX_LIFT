@@ -10,7 +10,6 @@ Cup place planning demo.
     - Output the pixel coordinates of the center points.
   取两个点的深度，UV 取平均用于可视化，3D 点取两个 ref 点的均值作为放杯位。
 
-其余交互、动作序列参考 cup_pick_planning.py。
 """
 from __future__ import annotations
 

@@ -1,6 +1,6 @@
 from autonav_robot import AutoNav_Robot
 from nav_utils import path_to_actions, merge_forward_actions, index_resample
-from dual_cup_pick_plannning import dual_arm_pick_planning
+from Demo.dual_cup_pick_planning import dual_arm_pick_planning
 from single_arm_pick_place import single_arm_pick_place
 import time
 import cv2
@@ -18,7 +18,7 @@ def main():
         """
         # dual arm pick planning and execute
         dual_arm_pick_planning(
-            arx_nav_robot.arx, goal="purple cup", reset_robot=False, close_robot=False, no_last_place=True)
+            arx_nav_robot.arx, goal="red cup", reset_robot=False, close_robot=False, no_last_place=True)
         # nav go
         arx_nav_robot.arx.step_lift(15.0)
         arx_nav_robot.nav_plan(user_instruction)

@@ -7,8 +7,8 @@ import cv2
 import numpy as np
 
 from arx_pointing import predict_multi_points_from_rgb
-from pick_place_cup_motion import build_pick_cup_sequence, build_place_cup_sequence
-from pick_place_straw_motion import (
+from motion_pick_place_cup import build_pick_cup_sequence, build_place_cup_sequence
+from motion_pick_place_straw import (
     build_pick_straw_sequence,
     build_place_straw_sequence,
 )

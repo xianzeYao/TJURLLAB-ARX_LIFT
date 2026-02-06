@@ -25,8 +25,8 @@ from typing import Optional, Tuple
 import threading
 import argparse
 import textwrap
-from pick_place_straw_motion import *
-from pick_place_cup_motion import *
+from motion_pick_place_straw import *
+from motion_pick_place_cup import *
 from point2pos_utils import (
     load_intrinsics,
     load_cam2ref,

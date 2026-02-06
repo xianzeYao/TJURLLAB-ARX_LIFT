@@ -26,7 +26,7 @@ from cv_bridge import CvBridge
 from rclpy.node import Node
 from sensor_msgs.msg import Image
 
-from pick_place_cup_motion import build_pick_cup_sequence, build_place_cup_sequence
+from motion_pick_place_cup import build_pick_cup_sequence, build_place_cup_sequence
 from point2pos_utils import load_cam2ref, load_intrinsics, pixel_to_ref_point
 from arx_pointing import predict_multi_points_from_rgb, predict_point_from_rgb
 

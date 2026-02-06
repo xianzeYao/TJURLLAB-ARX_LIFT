@@ -21,8 +21,8 @@ sys.path.append("../ARX_Realenv/ROS2")  # noqa
 from arx_ros2_env import ARXRobotEnv  # noqa
 from arx_pointing import predict_point_from_rgb  # noqa
 from point2pos_utils import load_intrinsics, load_cam2ref, pixel_to_ref_point  # noqa
-from pick_place_cup_motion import build_pick_cup_sequence, build_place_cup_sequence  # noqa
-from pick_place_straw_motion import build_pick_straw_sequence, build_place_straw_sequence  # noqa
+from motion_pick_place_cup import build_pick_cup_sequence, build_place_cup_sequence  # noqa
+from motion_pick_place_straw import build_pick_straw_sequence, build_place_straw_sequence  # noqa
 
 WORKSPACE = Path(__file__).resolve().parent.parent
 DEFAULT_INTR = WORKSPACE / "ARX_Realenv/Tools/instrinsics_camerah.json"

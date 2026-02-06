@@ -73,22 +73,23 @@ def _coaster_side_for_arm(arm: str) -> str:
     return "left coaster" if arm == "left" else "right coaster"
 
 
-def _build_dual_prompt(step_text: str, arm: str) -> str:
+def _build_dual_prompt(target_text: str, arm: str) -> str:
     coaster_side = _coaster_side_for_arm(arm)
-    return f"Point out the {step_text} and the nearest {coaster_side} of it and has no cup on it."
+    return f"Point out the {target_text} and the nearest {coaster_side} of it and has no cup on it."
 
 
 def _predict_step(
     color: np.ndarray,
     step_idx: int,
     step_text: str,
+    target_text: str,
     arm: str,
     skip_place: bool,
 ) -> dict:
     if skip_place:
-        dual_prompt = f"Point out the {step_text}."
+        dual_prompt = f"Point out the {target_text}."
     else:
-        dual_prompt = _build_dual_prompt(step_text, arm)
+        dual_prompt = _build_dual_prompt(target_text, arm)
 
     result = {
         "step_idx": step_idx,
@@ -182,7 +183,7 @@ def dual_arm_pick_planning(
                 cv2.waitKey(1)
                 continue
             # 调用 VLM 生成步骤
-            current_plan, _ = do_replan(color, planning_prompt)
+            current_plan, plan_cups = do_replan(color, planning_prompt)
 
             # --- 可视化：在图像上打印出规划 prompt 供确认 ---
             vis_img = color.copy()
@@ -249,10 +250,13 @@ def dual_arm_pick_planning(
             color = color.copy()
             arm = _arm_for_step(step_idx)
             pick_text = plan_steps[step_idx]
+            target_text = pick_text
+            if plan_cups and step_idx < len(plan_cups):
+                target_text = plan_cups[step_idx]
             is_last = step_idx == len(plan_steps) - 1
             skip_place = no_last_place and is_last
             current = _predict_step(
-                color, step_idx, pick_text, arm, skip_place
+                color, step_idx, pick_text, target_text, arm, skip_place
             )
 
             pick_px = current["pick_px"]
@@ -260,13 +264,18 @@ def dual_arm_pick_planning(
             dual_prompt = current["dual_prompt"]
             arm = current["arm"]
             skip_place = current["skip_place"]
+            display_prompt = (
+                f"Point out the {pick_text}."
+                if skip_place
+                else _build_dual_prompt(pick_text, arm)
+            )
 
             if pick_px is not None:
                 cv2.circle(color, pick_px, 5, (0, 0, 255), -1)
             if place_px is not None:
                 cv2.circle(color, place_px, 5, (255, 0, 0), -1)
 
-            prompt_lines = textwrap.wrap(dual_prompt, width=60)
+            prompt_lines = textwrap.wrap(display_prompt, width=60)
             if skip_place:
                 prompt_lines = ["(no_last_place)"] + prompt_lines
             draw_text_lines(
@@ -331,7 +340,8 @@ def main():
         camera_view=("camera_h",),
         img_size=(640, 480),
     )
-    dual_arm_pick_planning(arx)
+    dual_arm_pick_planning(arx, close_robot=False,
+                           no_last_place=True, goal="red cup")
 
 
 if __name__ == "__main__":
