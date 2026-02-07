@@ -20,8 +20,8 @@ sys.path.append("../ARX_Realenv/ROS2")  # noqa
 from arx_ros2_env import ARXRobotEnv  # noqa
 
 COASTER_PROMPTS = [
-    "the coaster (the left one near cups)",
-    "the coaster (the right one near cups)",
+    "the coaster (the left one near cups most)",
+    "the coaster (the right one near cups most)",
     "the coaster (the leftmost one)",
     "the coaster (the rightmost one)",
 ]
@@ -44,7 +44,7 @@ def _build_multi_prompt(
         'Format: [{"point_2d": [x, y]}, ...]. Return only JSON.\n'
         + "\n".join(lines)
     )
-    print(lines)
+    # print(lines)
     return prompt, lines
 
 
@@ -70,12 +70,12 @@ def _run_parallel_sequences(
 
 
 def _arm_home_action(arm: str, open_gripper: bool = True) -> Dict[str, np.ndarray]:
-    gripper = -3.0 if open_gripper else 0.0
+    gripper = -3.4 if open_gripper else 0.0
     active = np.array([0, 0, 0, 0, 0, 0, gripper], dtype=np.float32)
     return {"left": active} if arm == "left" else {"right": active}
 
 
-def dual_arm_pick_planning(
+def dual_arm_pick_planning_parallel(
     arx: ARXRobotEnv,
     reset_robot: bool = True,
     close_robot: bool = True,
@@ -153,7 +153,7 @@ def dual_arm_pick_planning(
                     )
                     print(f"新的 pick prompt 已设置为: {planning_prompt!r}")
                 continue
-            if key == ord("n"):
+            if key == ord("q"):
                 print("退出程序。")
                 planned = False
                 break
@@ -183,8 +183,11 @@ def dual_arm_pick_planning(
                     print(
                         f"plan_cups 数量不足({len(plan_cups)}/{len(plan_steps)}), 使用 plan_steps")
 
+            # prompt, prompt_lines = _build_multi_prompt(
+            #     target_steps, no_last_place)
+
             prompt, prompt_lines = _build_multi_prompt(
-                target_steps, no_last_place)
+                plan_cups, no_last_place)
             points = predict_multi_points_from_rgb(
                 color,
                 text_prompt="",
@@ -193,7 +196,7 @@ def dual_arm_pick_planning(
                 temperature=0.0,
             )
             pts = _decode_points(points)
-
+            pts[0] = (pts[0][0], pts[0][1]-20)  # 微调第一个 pick 点位置
             needed_points = len(plan_steps) * 2 - (1 if no_last_place else 0)
             if len(pts) < needed_points:
                 print(f"点数不足({len(pts)}/{needed_points}), 按 r 重试")
@@ -253,7 +256,7 @@ def dual_arm_pick_planning(
             key = cv2.waitKey(0)
             if key == ord("r"):
                 continue
-            if key == ord("n"):
+            if key == ord("q"):
                 break
             if key != ord("e"):
                 continue
@@ -305,6 +308,8 @@ def dual_arm_pick_planning(
             time.sleep(1.0)
 
             # 交替并行：当前步 place 与下一步 pick 同时执行
+            last_place_idx = steps_n - 2 if no_last_place else steps_n - 1
+            home_place_idx = last_place_idx if no_last_place else last_place_idx - 1
             for i in range(steps_n - 1):
                 cur_arm = _arm_for_step(i)
                 next_arm = _arm_for_step(i + 1)
@@ -313,9 +318,9 @@ def dual_arm_pick_planning(
                     if place_refs[i] is not None
                     else []
                 )
-                if cur_place:
+                if i == home_place_idx:
                     cur_place = list(cur_place) + \
-                        [_arm_home_action(cur_arm, open_gripper=True)]
+                        [_arm_home_action(cur_arm, open_gripper=False)]
                 next_pick = build_pick_cup_sequence(
                     pick_refs[i + 1], arm=next_arm)
 
@@ -335,7 +340,7 @@ def dual_arm_pick_planning(
                     place_refs[steps_n - 1], arm=last_arm
                 )
                 last_place = list(last_place) + \
-                    [_arm_home_action(last_arm, open_gripper=True)]
+                    [_arm_home_action(last_arm, open_gripper=False)]
                 if last_arm == "left":
                     _run_parallel_sequences(arx, last_place, None)
                 else:
@@ -364,8 +369,8 @@ def main():
         camera_view=("camera_h",),
         img_size=(640, 480),
     )
-    dual_arm_pick_planning(arx, close_robot=True,
-                           no_last_place=True)
+    dual_arm_pick_planning_parallel(arx, close_robot=True, goal="red cup",
+                                    no_last_place=True)
 
 
 if __name__ == "__main__":

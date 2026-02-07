@@ -116,7 +116,7 @@ def make_place_stop_action(pt_ref: Optional[np.ndarray], arm: str) -> Dict[str, 
     """回撤一点放置位置，保持不动。"""
     base = np.zeros(3, dtype=np.float32) if pt_ref is None else pt_ref
     active = np.array(
-        [base[0] - GRIPPER_OFFSET - 0.07, base[1],
+        [base[0] - GRIPPER_OFFSET - 0.09, base[1],
          base[2] + Z_CUP, 0, 0, 0, OPEN],
         dtype=np.float32,
     )

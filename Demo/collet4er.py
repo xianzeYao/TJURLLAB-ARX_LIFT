@@ -156,7 +156,7 @@ def main() -> None:
 
             tip = f"h={base_height:.2f} | points={len(points)} | w/s height | y save"
             cv2.putText(marked, tip, (12, 28), cv2.FONT_HERSHEY_SIMPLEX,
-                        0.7, (0, 255, 255), 2, cv2.LINE_AA)
+                        0.7, (0, 0, 255), 2, cv2.LINE_AA)
             cv2.imshow(win, marked)
 
             key = cv2.waitKey(1) & 0xFF

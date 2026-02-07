@@ -1,6 +1,7 @@
 from autonav_robot import AutoNav_Robot
 from nav_utils import path_to_actions, merge_forward_actions, index_resample
 from Demo.dual_cup_pick_planning import dual_arm_pick_planning
+from Demo.dual_cup_pick_planning_parallel import dual_arm_pick_planning_parallel
 from single_arm_pick_place import single_arm_pick_place
 import time
 import cv2
@@ -16,8 +17,10 @@ def main():
         To bypass the current table, first turn left and then move forward-right; And Then you will find the red dot.
         Once the red dot is in sight, head directly toward it. Upon reaching the red dot, perform a turn so that the bubble tea preparation area (which will be on your right) is directly in front of you.
         """
-        # dual arm pick planning and execute
-        dual_arm_pick_planning(
+        # dual arm pick planning and execute sequencly or parallelly
+        # dual_arm_pick_planning(
+        #     arx_nav_robot.arx, goal="red cup", reset_robot=False, close_robot=False, no_last_place=True)
+        dual_arm_pick_planning_parallel(
             arx_nav_robot.arx, goal="red cup", reset_robot=False, close_robot=False, no_last_place=True)
         # nav go
         arx_nav_robot.arx.step_lift(15.0)

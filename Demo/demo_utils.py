@@ -17,7 +17,7 @@ from motion_pick_place_straw import (
 def _extract_cup_phrases(text: str) -> List[str]:
     phrases: List[str] = []
     seen = set()
-    for m in re.finditer(r"\b([A-Za-z]+(?:\s+[A-Za-z]+)*)\s+cup\b", text):
+    for m in re.finditer(r"\b([A-Za-z]+)\s+cup\b", text):
         phrase = m.group(0).strip()
         key = phrase.lower()
         if key in seen:
