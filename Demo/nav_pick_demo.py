@@ -51,12 +51,15 @@ def main():
             go_home=False,
         )
         # nav back
-        arx_nav_robot.run_for_1s(chx=-0.5, duration=2.2)
-        arx_nav_robot.run_for_1s(chz=-0.5, duration=20.6 - 20.6 / 2.5)
-        arx_nav_robot.motion_inversion()
-        arx_nav_robot.run_for_1s(chx=0.5, duration=2.5)
-        arx_nav_robot.run_for_1s(chz=0.5, duration=10.3)
-        arx_nav_robot.run_for_1s(chx=0.5, duration=1.5)
+        arx_nav_robot.run_for_1s(chx=-0.5, duration=5.5)
+        arx_nav_robot.run_for_1s(chz=-0.5, duration=20.6/2.0)
+        arx_nav_robot.run_for_1s(chx=0.5, duration=11.5)
+        arx_nav_robot.turn_left_corner()
+        arx_nav_robot.run_for_1s(chz=0.5, duration=20.6/12.0)
+        arx_nav_robot.go_to_goal(
+            "center of red circular landmark on the ground", left_side=True)
+        arx_nav_robot.run_for_1s(chz=0.5, duration=(20.6*5.0)/12.0)
+
         # place the bubble tea cup to the customer area and insert a straw
         arx_nav_robot.arx.step_lift(14.0)
         dual_cup_straw(arx_nav_robot.arx, cup_side="left", close_robot=False)

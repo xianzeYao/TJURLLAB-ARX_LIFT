@@ -14,7 +14,6 @@ CLOSE = -2.2
 
 def dual_cup_straw(arx: ARXRobotEnv, cup_side="left", close_robot=True):
     try:
-        arx.reset()
         arx.step_lift(16.0)
         straw_side = "right" if cup_side == "left" else "left"
         K = load_intrinsics()
@@ -120,6 +119,7 @@ def main():
                       camera_type="all",
                       camera_view=("camera_h",),
                       img_size=(640, 480))
+    arx.reset()
     dual_cup_straw(arx, cup_side="left", close_robot=True)
 
 

@@ -40,11 +40,10 @@ def _build_multi_prompt(
         if not (no_last_place and i == len(plan_steps) - 1):
             lines.append(f"Point out the {COASTER_PROMPTS[i]}")
     prompt = (
-        "Provide the pixel coordinates of each point in order as a JSON list of objects. "
         'Format: [{"point_2d": [x, y]}, ...]. Return only JSON.\n'
         + "\n".join(lines)
     )
-    # print(lines)
+    print(lines)
     return prompt, lines
 
 
@@ -132,7 +131,7 @@ def dual_arm_pick_planning_parallel(
                 for i, step in enumerate(current_plan):
                     print(f"  {i+1}. {step}")
             cv2.imshow(confirm_win, vis_img)
-            print("按'y' 确认, 'r' 重试, 'p' 更新目标, 'n' 退出")
+            print("按'y' 确认, 'r' 重试, 'p' 更新目标, 'q' 退出")
             key = cv2.waitKey(0)
             if key == ord("y") and current_plan:
                 plan_steps = current_plan[:4]
@@ -240,7 +239,7 @@ def dual_arm_pick_planning_parallel(
 
             info_lines = [
                 f"Steps: {len(plan_steps)} | no_last_place={no_last_place}",
-                "Press 'r' to re-predict, 'e' to execute, 'n' to quit",
+                "Press 'r' to re-predict, 'e' to execute, 'q' to quit",
             ]
             draw_text_lines(
                 disp,

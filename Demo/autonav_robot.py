@@ -707,9 +707,9 @@ Return the result in JSON format as:
                     ch = sys.stdin.read(1)
                     if ch == 'q':
                         print("\n[Emergency Stop] 'q' pressed.")
+                        self.arx.close()
                         self.running = False
                         self.stop()
-                        self.arx.close()
                         break
         finally:
             # 🔒 确保退出时终端状态恢复
