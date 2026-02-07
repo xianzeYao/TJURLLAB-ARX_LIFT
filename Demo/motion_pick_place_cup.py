@@ -4,7 +4,7 @@ from typing import Dict, Optional
 CLOSE = 0.0
 OPEN = -3.0
 GRIPPER_OFFSET = 0.15
-GRIPPER_CUP = -2.0
+GRIPPER_CUP = -2.2
 Z_CUP = 0.07
 
 

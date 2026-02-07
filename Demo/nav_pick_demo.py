@@ -1,11 +1,12 @@
+import math
+import cv2
+import time
+from single_arm_pick_place import single_arm_pick_place
 from autonav_robot import AutoNav_Robot
 from nav_utils import path_to_actions, merge_forward_actions, index_resample
-from Demo.dual_cup_pick_planning import dual_arm_pick_planning
-from Demo.dual_cup_pick_planning_parallel import dual_arm_pick_planning_parallel
-from single_arm_pick_place import single_arm_pick_place
-import time
-import cv2
-import math
+from dual_cup_pick_planning import dual_arm_pick_planning
+from dual_cup_pick_planning_parallel import dual_arm_pick_planning_parallel
+from dual_cup_straw import dual_cup_straw
 
 
 def main():
@@ -58,15 +59,7 @@ def main():
         arx_nav_robot.run_for_1s(chx=0.5, duration=1.5)
         # place the bubble tea cup to the customer area and insert a straw
         arx_nav_robot.arx.step_lift(14.0)
-        single_arm_pick_place(
-            arx_nav_robot.arx,
-            arm="left",
-            pick_prompt="",
-            place_prompt="the center of the empty coaster",
-            reset_robot=False,
-            close_robot=False,
-            debug=False,
-        )
+        dual_cup_straw(arx_nav_robot.arx, cup_side="left", close_robot=False)
     finally:
         arx_nav_robot.arx.close()
 
