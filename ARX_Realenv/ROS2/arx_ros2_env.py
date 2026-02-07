@@ -336,8 +336,8 @@ def main():
                       min_steps_per_action=60,
                       min_steps_gripper=20,
 
-                      max_v_xyz=0.1,
-                      max_v_rpy=0.1,
+                      max_v_xyz=0.15,
+                      max_v_rpy=0.3,
                       camera_type="all",
                       camera_view=("camera_h",),
                       dir="testdata",

@@ -51,8 +51,8 @@ class AutoNav_Robot():
             min_steps_per_action=60,
             min_steps_gripper=20,
 
-            max_v_xyz=0.2,
-            max_v_rpy=0.2,
+            max_v_xyz=0.15,
+            max_v_rpy=0.3,
 
             camera_type=camera_type,
             camera_view=camera_view,
