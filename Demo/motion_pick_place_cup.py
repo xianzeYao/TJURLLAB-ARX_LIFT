@@ -5,7 +5,8 @@ CLOSE = 0.0
 OPEN = -3.0
 GRIPPER_OFFSET = 0.15
 GRIPPER_CUP = -2.2
-Z_CUP = 0.07
+Z_CUP = 0.05
+# Z_CUP = 0.07
 
 
 def _make_arm_action(arm: str, active: np.ndarray) -> Dict[str, np.ndarray]:
@@ -73,7 +74,7 @@ def make_place_move_action(pt_ref: Optional[np.ndarray], arm: str) -> Dict[str, 
     base = np.zeros(3, dtype=np.float32) if pt_ref is None else pt_ref
     active = np.array(
         [base[0] - GRIPPER_OFFSET-0.05, base[1],
-         base[2] + Z_CUP+0.05, 0, 0, 0, GRIPPER_CUP],
+         base[2] + Z_CUP+0.04, 0, 0, 0, GRIPPER_CUP],
         dtype=np.float32,
     )
     return _make_arm_action(arm, active)
@@ -84,7 +85,7 @@ def make_place_robust_action(pt_ref: Optional[np.ndarray], arm: str) -> Dict[str
     base = np.zeros(3, dtype=np.float32) if pt_ref is None else pt_ref
     active = np.array(
         [base[0] - GRIPPER_OFFSET-0.01, base[1],
-         base[2] + Z_CUP+0.05, 0, 0, 0, GRIPPER_CUP],
+         base[2] + Z_CUP+0.04, 0, 0, 0, GRIPPER_CUP],
         dtype=np.float32,
     )
     return _make_arm_action(arm, active)
@@ -95,7 +96,7 @@ def make_down_action(pt_ref: Optional[np.ndarray], arm: str) -> Dict[str, np.nda
     base = np.zeros(3, dtype=np.float32) if pt_ref is None else pt_ref
     active = np.array(
         [base[0] - GRIPPER_OFFSET-0.01, base[1],
-         base[2] + Z_CUP-0.02, 0, 0, 0, GRIPPER_CUP],
+         base[2] + Z_CUP+0.01, 0, 0, 0, GRIPPER_CUP],
         dtype=np.float32,
     )
     return _make_arm_action(arm, active)
@@ -106,7 +107,7 @@ def make_open_action(pt_ref: Optional[np.ndarray], arm: str) -> Dict[str, np.nda
     base = np.zeros(3, dtype=np.float32) if pt_ref is None else pt_ref
     active = np.array(
         [base[0] - GRIPPER_OFFSET-0.01, base[1],
-            base[2] + Z_CUP-0.02, 0, 0, 0, OPEN],
+            base[2] + Z_CUP+0.01, 0, 0, 0, OPEN],
         dtype=np.float32,
     )
     return _make_arm_action(arm, active)
@@ -117,7 +118,7 @@ def make_place_stop_action(pt_ref: Optional[np.ndarray], arm: str) -> Dict[str, 
     base = np.zeros(3, dtype=np.float32) if pt_ref is None else pt_ref
     active = np.array(
         [base[0] - GRIPPER_OFFSET - 0.09, base[1],
-         base[2] + Z_CUP, 0, 0, 0, OPEN],
+         base[2] + Z_CUP+0.02, 0, 0, 0, OPEN],
         dtype=np.float32,
     )
     return _make_arm_action(arm, active)

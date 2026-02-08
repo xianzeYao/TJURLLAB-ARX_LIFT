@@ -18,12 +18,12 @@ def dual_cup_straw(arx: ARXRobotEnv, cup_side="left", close_robot=True):
         straw_side = "right" if cup_side == "left" else "left"
         K = load_intrinsics()
         T = load_cam2ref(side=straw_side)
-        pick_straw_prompt = f"the top of the black straw on the {straw_side} side"
+        pick_straw_prompt = f"the top of the nearest black straw in the cup"
         place_straw_prompt = f"the opening of the center of the cup's opening on the {cup_side} hand"
         pick_execute = False
         place_execute = False
         while not pick_execute:
-            time.sleep(1.0)
+            time.sleep(2.0)
             frames = arx.node.get_camera(
                 target_size=(640, 480), return_status=False)
             color = frames.get("camera_h_color")
@@ -58,7 +58,7 @@ def dual_cup_straw(arx: ARXRobotEnv, cup_side="left", close_robot=True):
                 [0.35, 0.125, -0.05, 0, 0, 1.571, CLOSE], dtype=np.float32)}
         arx.step(suit_action)
         while not place_execute:
-            time.sleep(1.0)
+            time.sleep(2.0)
             frames = arx.node.get_camera(
                 target_size=(640, 480), return_status=False)
             color = frames.get("camera_h_color")

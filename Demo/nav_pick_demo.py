@@ -55,7 +55,7 @@ def main():
         arx_nav_robot.run_for_1s(chz=-0.5, duration=20.6/2.0)
         arx_nav_robot.run_for_1s(chx=0.5, duration=11.5)
         arx_nav_robot.turn_left_corner()
-        arx_nav_robot.run_for_1s(chz=0.5, duration=20.6/12.0)
+        arx_nav_robot.run_for_1s(chz=0.5, duration=20.6/10.0)
         arx_nav_robot.go_to_goal(
             "center of red circular landmark on the ground", left_side=True)
         arx_nav_robot.run_for_1s(chz=0.5, duration=(20.6*5.0)/12.0)

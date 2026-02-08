@@ -8,7 +8,7 @@ from typing import Dict, List, Optional, Tuple
 import cv2
 import numpy as np
 
-from arx_pointing import predict_multi_points_from_rgb
+from arx_pointing import predict_multi_points_from_rgb, predict_point_from_rgb
 from demo_utils import do_replan, draw_text_lines
 from motion_pick_place_cup import (
     build_pick_cup_sequence,
@@ -51,6 +51,17 @@ def _decode_points(points: List[Tuple[float, float]]) -> List[Tuple[int, int]]:
     return [(int(round(u)), int(round(v))) for (u, v) in points]
 
 
+def _build_single_prompts(
+    plan_steps: List[str], no_last_place: bool
+) -> List[str]:
+    lines: List[str] = []
+    for i, step in enumerate(plan_steps):
+        lines.append(step)
+        if not (no_last_place and i == len(plan_steps) - 1):
+            lines.append(COASTER_PROMPTS[i])
+    return lines
+
+
 def _run_parallel_sequences(
     arx: ARXRobotEnv,
     left_seq: Optional[List[dict]],
@@ -80,7 +91,8 @@ def dual_arm_pick_planning_parallel(
     close_robot: bool = True,
     no_last_place: bool = False,
     goal: str = "red cup",
-    go_home_after_all: bool = False,
+    go_home: bool = False,
+    single_test: bool = False,
 ):
     try:
         if reset_robot:
@@ -163,7 +175,7 @@ def dual_arm_pick_planning_parallel(
             cv2.namedWindow(win, cv2.WINDOW_NORMAL)
 
         while planned and plan_steps:
-            arx.step_lift(14.0)
+            arx.step_lift(13.5)
             time.sleep(1.0)
             frames = arx.node.get_camera(
                 target_size=(640, 480), return_status=False)
@@ -182,25 +194,47 @@ def dual_arm_pick_planning_parallel(
                     print(
                         f"plan_cups 数量不足({len(plan_cups)}/{len(plan_steps)}), 使用 plan_steps")
 
-            # prompt, prompt_lines = _build_multi_prompt(
-            #     target_steps, no_last_place)
-
-            prompt, prompt_lines = _build_multi_prompt(
-                plan_cups, no_last_place)
-            points = predict_multi_points_from_rgb(
-                color,
-                text_prompt="",
-                all_prompt=prompt,
-                assume_bgr=False,
-                temperature=0.0,
-            )
-            pts = _decode_points(points)
-            pts[0] = (pts[0][0], pts[0][1]-20)  # 微调第一个 pick 点位置
             needed_points = len(plan_steps) * 2 - (1 if no_last_place else 0)
+            if single_test:
+                prompt_lines = _build_single_prompts(
+                    target_steps, no_last_place)
+                if len(prompt_lines) != needed_points:
+                    print(
+                        f"prompt 数量异常({len(prompt_lines)}/{needed_points}), 按 r 重试")
+                    cv2.waitKey(1)
+                    continue
+                pts: List[Tuple[int, int]] = []
+                for prompt in prompt_lines:
+                    try:
+                        u, v = predict_point_from_rgb(
+                            color,
+                            text_prompt=prompt,
+                            temperature=0.0,
+                            assume_bgr=False,
+                        )
+                    except RuntimeError as exc:
+                        print(f"单点预测失败，按 r 重试：{exc}")
+                        pts = []
+                        break
+                    pts.append((int(round(u)), int(round(v))))
+            else:
+                prompt, prompt_lines = _build_multi_prompt(
+                    target_steps, no_last_place)
+                points = predict_multi_points_from_rgb(
+                    color,
+                    text_prompt="",
+                    all_prompt=prompt,
+                    temperature=0.0,
+                    assume_bgr=False,
+                )
+                pts = _decode_points(points)
+
             if len(pts) < needed_points:
                 print(f"点数不足({len(pts)}/{needed_points}), 按 r 重试")
                 cv2.waitKey(1)
                 continue
+
+            pts[0] = (pts[0][0], pts[0][1]-15)  # 微调第一个 pick 点位置
 
             # 按顺序映射：奇数行为 pick，偶数行为 place
             pick_px: List[Tuple[int, int]] = []
@@ -346,7 +380,7 @@ def dual_arm_pick_planning_parallel(
                     _run_parallel_sequences(arx, None, last_place)
                 time.sleep(1.0)
 
-            if go_home_after_all:
+            if go_home:
                 arx._go_to_initial_pose()
 
             break
@@ -369,7 +403,7 @@ def main():
         img_size=(640, 480),
     )
     dual_arm_pick_planning_parallel(arx, close_robot=True, goal="red cup",
-                                    no_last_place=True)
+                                    no_last_place=True, single_test=True)
 
 
 if __name__ == "__main__":

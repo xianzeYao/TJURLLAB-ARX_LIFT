@@ -8,7 +8,6 @@ import numpy as np
 
 def hello(arx: ARXRobotEnv, side="left", close_robot=True):
     try:
-        arx.reset()
         arx.step_lift(16.0)
         hello_base = np.array([0.05, 0.0, 0.4], dtype=np.float32)
         if side == "left":
@@ -37,7 +36,8 @@ def main():
                       camera_type="all",
                       camera_view=("camera_h",),
                       img_size=(640, 480))
-    dual_cup_straw(arx, cup_side="left", close_robot=True)
+    arx.reset()
+    hello(arx, side="left", close_robot=True)
 
 
 if __name__ == "__main__":

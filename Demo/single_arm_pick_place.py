@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Optional, Tuple
 
 import cv2
+import numpy as np
 
 from arx_pointing import predict_multi_points_from_rgb
 from demo_utils import draw_text_lines, execute_pick_place_cup_sequence
@@ -108,6 +109,23 @@ def single_arm_pick_place(
 
             pick_ref = None
             place_ref = None
+            valid_depth = True
+            if pick_px is not None:
+                u, v = pick_px
+                raw_depth = float(depth[v, u])
+                if not np.isfinite(raw_depth) or raw_depth <= 0:
+                    print(f"预测像素 {pick_px} 深度无效({raw_depth})，按 r 重试")
+                    valid_depth = False
+            if place_px is not None and valid_depth:
+                u, v = place_px
+                raw_depth = float(depth[v, u])
+                if not np.isfinite(raw_depth) or raw_depth <= 0:
+                    print(f"预测像素 {place_px} 深度无效({raw_depth})，按 r 重试")
+                    valid_depth = False
+
+            if not valid_depth:
+                continue
+
             if pick_px is not None:
                 pick_ref = pixel_to_ref_point(pick_px, depth, K, T_cam2ref)
             if place_px is not None:
@@ -139,7 +157,7 @@ def single_arm_pick_place(
                 key = cv2.waitKey(0)
                 if key == ord("r"):
                     continue
-                if key == ord("n"):
+                if key == ord("q"):
                     return None, None
                 # 默认确认
             else:
