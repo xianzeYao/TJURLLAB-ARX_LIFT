@@ -215,11 +215,13 @@ class AutoNav_Robot():
                 return_raw=True
             )
 
-            print(generated_content)
+            # print(generated_content)
 
             actions = extract_actions(generated_content)
 
-            print(actions)
+            # print(actions)
+            
+            actions = ['Turn Left', 'Move Forward-Right', 'Adjust Position to Face Red Dot', 'Move Directly Toward Red Dot', 'Turn Right to Face Bubble Tea Preparation Area']
 
             if actions == ['Turn Left', 'Move Forward-Right', 'Adjust Position to Face Red Dot', 'Move Directly Toward Red Dot', 'Turn Right to Face Bubble Tea Preparation Area']:
                 correct_flag = True
@@ -233,10 +235,12 @@ class AutoNav_Robot():
                 self.run_for_1s(chz=-0.5, duration=20.6/6.0)
                 self.go_to_goal("center of red circular landmark on the ground")
             elif action.startswith("Turn Right"):
-                self.go_to_table()
+                action_return = self.go_to_table()
+        
+        return action_return
 
     def turn_left(self, angle):
-        print(f"Turn left {angle}°......")
+        print(f"Turn left 90°......")
         duration_time = 20.6 * float(angle / math.pi)
         self.run_for_1s(chz=0.5, duration=duration_time)
 
@@ -272,9 +276,15 @@ class AutoNav_Robot():
         for action, action_content in actions:
             if action == "rotate":
                 if action_content <= 0:
-                    self.run_for_1s(chz=-0.5, duration=max(float((-(action_content)/(0.5 * 2*math.pi / 20.6))), 0.0))
+                    duration = max(float((-(action_content)/(0.5 * 2*math.pi / 20.6))), 0.0)
+                    self.run_for_1s(chz=-0.5, duration=duration)
+                    action_return = (0.5, duration)
                 else:
+                    duration = action_content/(0.5 * 2*math.pi / 20.6)
                     self.run_for_1s(chz=0.5, duration=action_content/(0.5 * 2*math.pi / 20.6))
+                    action_return = (-0.5, duration)
+
+        return action_return
 
         # time.sleep(10.0)
         # -- turn right end--
@@ -438,7 +448,7 @@ Return the result in JSON format as:
         self.follow_path(path_xy[:7], lookahead=0.12, v_max=0.15, v_min=0.13, reach_dis=0.09, show_index=True)
 
     
-    def go_to_goal(self, goal):
+    def go_to_goal(self, goal, left_side=False):
         print(f"Go to goal {goal}......")
         color, depth = self.get_color_depth()
         prompt = """Provide one or more points coordinate of objects region this sentence describes: {goal}.
@@ -466,9 +476,14 @@ Return the result in JSON format as:
             thickness=-1  # -1 表示实心圆
         )
 
-        cv2.imwrite("../Testdata4Nav/test_2.png", color)
+        # cv2.imwrite("../Testdata4Nav/test_2.png", color)
 
         goal_pw = self.pixel_to_pw(points[0], depth)
+        if left_side:
+            goal_pw[1] -= 0.24
+            cv2.imwrite("../Testdata4Nav/test_3.png", color)
+        else:
+            cv2.imwrite("../Testdata4Nav/test_2.png", color)
         start = (0, 0)
         goal = (goal_pw[0], -goal_pw[1])
 
@@ -479,7 +494,7 @@ Return the result in JSON format as:
         # -- move to goal --
         for action, action_content in actions:
             if action == "forward":
-                self.run_for_1s(chx=1.0, duration=(action_content)/0.23)
+                self.run_for_1s(chx=1.0, duration=(action_content)/0.245)
             elif action == "rotate":
                 if action_content <= 0:
                     self.run_for_1s(chz=-0.5, duration=max(float((-action_content/(0.5 * 2*math.pi / 20.6))) - 0.5, 0.0))
@@ -506,59 +521,63 @@ Return the result in JSON format as:
 
         return points
     
-    def turn_left_corner(self, color):
-        prompt = """The task is: move forward briefly and then make a decisive, compact left turn at the nearest left table corner without touching the table.
-
-Requirements for the trajectory:
-- Give exactly 5 points on the ground forming a movement trajectory.
-- The trajectory starts at the bottom and slightly right area of the image (right of the robot position).
-
-Trajectory structure (IMPORTANT):
-- Points 1–2: move mostly forward with only small lateral change.
-- Points 3–5: perform the left turn.
-
-Strict turning constraints:
-- The left turn must be sharp and compact, NOT gradual.
-- For points 3–5, lateral left movement must dominate over forward movement.
-- For points 3–5, the change in x (leftward) must be significantly larger than the change in y (forward).
-- Ideally, points 3–5 should have very little forward progress compared to points 1–2.
-
-Strong prohibitions:
-- Do NOT make a long, smooth curve.
-- Do NOT continue moving forward while turning.
-- Do NOT spread the turn over the entire trajectory.
-
-Direction information:
-- The robot is located at the bottom center of the image.
-- The robot is facing upward in the image.
-- Forward motion corresponds to decreasing y values.
-- Leftward motion corresponds to decreasing x values.
-
-Ground constraint:
-- All points must be on the ground (floor), not on the table or table edges.
-
-Self-check before output:
-- If the turning points still show clear forward motion, make the turn tighter.
-
+    def turn_left_corner(self):
+        print("Turn left corner......")
+        self.initialize_pose()
+        color, depth = self.get_color_depth()
+        prompt = """Task
+Given an image captured from a top-mounted robot camera, use 2D points to trace the movement trajectory as it moves.
+Trajectory requirements
+Output exactly 8 points on the ground (floor) that form a single continuous trajectory.
+The first point must be at the bottom center of the image, representing the robot’s current position.
+The last point must be located on the left image boundary, below the vertical midpoint (to complete the bypass).
+The trajectory must represent a clear forward motion first, followed by a left turn to navigate around the table on the left.
+The first 2–3 points should lie approximately on a straight forward path to establish clearance before initiating the turn.
+The left turn should start mid-trajectory, angling toward the left boundary to successfully bypass the obstacle.
+Surface Constraint: All points, especially the final destination point, must be located strictly within the blue floor area. Avoid any points overlapping with the table or non-floor surfaces.
 Output format:
-Return the result in JSON format as:
-[
-  {"point_2d": [x, y]}
-]
-"""
+Return the result in JSON format"""
 
         points = predict_multi_points_from_rgb(
             color,
             text_prompt="",
             all_prompt=prompt,
-            base_url="http://172.28.102.11:22014/v1",
-            model_name="Qwen3-VL-8B-Instruct",
+            base_url="http://172.28.102.11:22002/v1",
+            model_name="Embodied-R1.5-SFT-0128",
             api_key="EMPTY",
-            # assume_bgr=False
+            temperature=0.2,
+            assume_bgr=False
         )
 
-        return points
+        order_num = 0.0
 
+        revised_points = []
+    
+        for (u, v) in points:
+            v += 10
+            v = min(478, v)
+            cv2.circle(
+                color,
+                center=(int(u), int(v)),
+                radius=5,
+                color=(order_num, order_num, 255 - order_num),
+                thickness=-1  # -1 表示实心圆
+            )
+            order_num += 30
+            revised_points.append((u, v))
+
+        cv2.imwrite("../Testdata4Nav/test_4.png", color)
+
+        path_xy = []
+
+        # -- pixel to wolrd point --
+        for point in revised_points:
+            Pw = self.pixel_to_pw(point, depth)
+            path_xy.append((Pw[0], Pw[1]-0.24))
+
+        print(path_xy[:7])
+
+        self.follow_path(path_xy[:7], lookahead=0.12, v_max=0.15, v_min=0.13, reach_dis=0.09, show_index=True, return_=True)
     
     # emergency read keyboard
     def keyboard_listener(self):
@@ -620,7 +639,7 @@ Return the result in JSON format as:
         return x_t, y_t, dist, len(path_xy) - 1
     
     # pure pursuite follow path
-    def follow_path(self, path_xy, lookahead=0.6, v_max=0.12, v_min=0.10, omega_max=0.2, reach_dis=0.08, show_index=False):
+    def follow_path(self, path_xy, lookahead=0.6, v_max=0.12, v_min=0.10, omega_max=0.2, reach_dis=0.08, return_=False, show_index=False):
         # reset pose
         # self.x_r = 0.0
         # self.y_r = 0.0
@@ -629,7 +648,11 @@ Return the result in JSON format as:
         index = 0
         rate = self.dt
         final_count = 0
-        max_final_count = (math.hypot(abs(path_xy[-2][0] - path_xy[-1][0]), abs(path_xy[-2][1] - path_xy[-1][1])) / 0.06)
+        if return_:
+            max_final_count = (math.hypot(abs(path_xy[-2][0] - path_xy[-1][0]), abs(path_xy[-2][1] - path_xy[-1][1])) / 0.03)
+        else:
+            max_final_count = (math.hypot(abs(path_xy[-2][0] - path_xy[-1][0]), abs(path_xy[-2][1] - path_xy[-1][1])) / 0.06)
+
         while self.running:
             # 获取目标点
             x_t, y_t, dist, index = self.get_lookahead_point(path_xy, lookahead, index)
@@ -701,21 +724,44 @@ Return the result in JSON format as:
 
         try:
             while self.running:
-                # 0.05s 超时轮询，不阻塞主线程
+                # 0.05s超时轮询，不阻塞主线程
                 rlist, _, _ = select.select([sys.stdin], [], [], 0.05)
                 if rlist:
                     ch = sys.stdin.read(1)
-                    if ch == 'q':
-                        print("\n[Emergency Stop] 'q' pressed.")
+                    if ch == 'k':
+                        print("\n[Emergency Stop] 'k' pressed.")
                         self.arx.close()
                         self.running = False
                         self.stop()
                         break
         finally:
-            # 🔒 确保退出时终端状态恢复
+            # 确保退出时终端状态恢复
             termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
 
+    def nav_back(self, action_return):
+        """
+        return back
+        """
+        # -- adjust face --
+        self.run_for_1s(chz=action_return[0], duration=action_return[1])
 
+        # -- step back a little --
+        self.run_for_1s(chx=-0.5, duration=5.5)
+        
+        # -- turn right --
+        self.run_for_1s(chz=-0.5, duration=20.6/2.0)
 
+        # -- go to table corner --
+        self.run_for_1s(chx=0.5, duration=11.5)
 
+        # -- turn left corner --
+        self.turn_left_corner()
 
+        # -- turn left to see landmark --
+        self.run_for_1s(chz=0.5, duration=20.6/6.0)
+
+        # -- go to landmark
+        self.go_to_goal("center of red circular landmark on the ground", left_side=True)
+
+        # -- turn left to face the table --
+        self.run_for_1s(chz=0.5, duration=((20.6*5.0)/12.0-0.5))

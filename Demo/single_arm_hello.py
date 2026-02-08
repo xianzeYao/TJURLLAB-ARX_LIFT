@@ -60,6 +60,7 @@ def hello(arx: ARXRobotEnv, side="left", close_robot=True, wave_cycles: int = 1)
         # JOINT控制抬升
         give_joint_action(arx=arx, side=side, joint_key=[1, 2, 3],
                           target_pos=[0.7, 1.0, 1.3], num=60, sleep_s=arx.duration_per_step)
+        time.sleep(0.5)
         # 单纯手腕控制用joint进行控制
         give_joint_action(
             arx, side, joint_key=4, target_pos=-0.7, num=30, sleep_s=arx.duration_per_step)

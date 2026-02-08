@@ -68,7 +68,7 @@ def make_place_move_action(pt_ref: Optional[np.ndarray], arm: str) -> Dict[str, 
     """保持抓取偏移到放置目标附近，保持不动。"""
     base = np.zeros(3, dtype=np.float32) if pt_ref is None else pt_ref
     active = np.array(
-        [base[0] - GRIPPER_OFFSET-0.04, base[1],
+        [base[0] - GRIPPER_OFFSET-0.02, base[1],
             base[2]+Z_STRAW, 0, 0, 0, CLOSE],
         dtype=np.float32,
     )
@@ -79,7 +79,7 @@ def make_place_robust_action(pt_ref: Optional[np.ndarray], arm: str) -> Dict[str
     """执行向前移动，准备鲁棒放置位置。"""
     base = np.zeros(3, dtype=np.float32) if pt_ref is None else pt_ref
     active = np.array(
-        [base[0]-GRIPPER_OFFSET-0.01, base[1],
+        [base[0]-GRIPPER_OFFSET+0.01, base[1],
             base[2]+Z_STRAW, 0, 0, 0, CLOSE],
         dtype=np.float32,
     )
@@ -90,8 +90,8 @@ def make_down_action(pt_ref: Optional[np.ndarray], arm: str) -> Dict[str, np.nda
     """下降到放置位置，保持不动。"""
     base = np.zeros(3, dtype=np.float32) if pt_ref is None else pt_ref
     active = np.array(
-        [base[0]-GRIPPER_OFFSET-0.01, base[1],
-            base[2]+Z_STRAW-0.05, 0, 0, 0, CLOSE],
+        [base[0]-GRIPPER_OFFSET+0.01, base[1],
+            base[2]+Z_STRAW-0.06, 0, 0, 0, CLOSE],
         dtype=np.float32,
     )
     return _make_arm_action(arm, active)
@@ -101,7 +101,7 @@ def make_open_action(pt_ref: Optional[np.ndarray], arm: str) -> Dict[str, np.nda
     """夹爪张开放置"""
     base = np.zeros(3, dtype=np.float32) if pt_ref is None else pt_ref
     active = np.array(
-        [base[0]-GRIPPER_OFFSET-0.01, base[1],
+        [base[0]-GRIPPER_OFFSET+0.01, base[1],
             base[2]+Z_STRAW-0.05, 0, 0, 0, OPEN],
         dtype=np.float32,
     )
@@ -112,7 +112,7 @@ def make_place_stop_action(pt_ref: Optional[np.ndarray], arm: str) -> Dict[str, 
     """回撤一点放置位置，保持不动。"""
     base = np.zeros(3, dtype=np.float32) if pt_ref is None else pt_ref
     active = np.array(
-        [base[0]-GRIPPER_OFFSET-0.06, base[1],
+        [base[0]-GRIPPER_OFFSET-0.02, base[1],
             base[2]+Z_STRAW, 0, 0, 0, OPEN],
         dtype=np.float32,
     )

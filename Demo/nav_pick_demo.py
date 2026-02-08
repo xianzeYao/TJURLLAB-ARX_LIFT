@@ -25,7 +25,7 @@ def main():
             arx_nav_robot.arx, goal="red cup", reset_robot=False, close_robot=False, no_last_place=True)
         # nav go
         arx_nav_robot.arx.step_lift(15.0)
-        arx_nav_robot.nav_plan(user_instruction)
+        action_return = arx_nav_robot.nav_plan(user_instruction)
         # place empty cup to making area and pick the bubble tea
         arx_nav_robot.arx.step_lift(17.0)
         single_arm_pick_place(
@@ -51,7 +51,7 @@ def main():
             go_home=False,
         )
         # nav back
-        arx_nav_robot.
+        arx_nav_robot.nav_back(action_return)
         # place the bubble tea cup to the customer area and insert a straw
         arx_nav_robot.arx.step_lift(14.0)
         dual_cup_straw(arx_nav_robot.arx, cup_side="left", close_robot=False)

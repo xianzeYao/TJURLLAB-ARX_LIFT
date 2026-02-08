@@ -22,7 +22,7 @@ DEFAULT_LEFT_EXTRINSICS = WORKSPACE / \
 DEFAULT_RIGHT_EXTRINSICS = WORKSPACE / \
     "ARX_Realenv/Tools/extrinsics_cam_h_right.json"
 
-BIAS_REF2CAM = np.array([0.48, 0.0, 0.0, 0.0])
+BIAS_REF2CAM = np.array([0.0, 0.24, 0.0, 0.0])
 
 
 def depth_to_meters(raw_depth: float) -> float:

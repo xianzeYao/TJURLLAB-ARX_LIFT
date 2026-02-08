@@ -153,7 +153,6 @@ class ARXRobotEnv():
                 f"Failed to go to the initial pose: {error_message}")
 
         # 2. Disable the robot
-
         success, error_message = self._disable_robot()
         if not success:
             raise RuntimeError(f"Failed to disable the robot: {error_message}")

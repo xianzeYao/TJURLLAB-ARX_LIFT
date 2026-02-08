@@ -15,7 +15,7 @@ def dual_cup_straw(arx: ARXRobotEnv, cup_side="left", close_robot=True):
         arx.step_lift(16.0)
         straw_side = "right" if cup_side == "left" else "left"
         pick_straw_prompt = f"the top of the nearest black straw in the cup"
-        place_straw_prompt = f"the opening of the center of the cup's opening on the {cup_side} hand"
+        place_straw_prompt = f"the exact center of the cup's opening"
         single_arm_pick_place(
             arx,
             pick_prompt=pick_straw_prompt,

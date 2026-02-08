@@ -8,26 +8,20 @@ def main():
     arx_nav_robot = AutoNav_Robot()
     try:
         # time.sleep(3.0)
+        # color, depth = arx_nav_robot.get_color_depth()
+        
+        # cv2.imwrite("../Testdata4Nav/test_return_corner.png", color)
+        
         user_instruction = """
         Now I need you to navigate to the bubble tea preparation area.
         To bypass the current table, first turn left and then move forward-right; And Then you will find the red dot.
         Once the red dot is in sight, head directly toward it. Upon reaching the red dot, perform a turn so that the bubble tea preparation area (which will be on your right) is directly in front of you.
         """
         # go
-        arx_nav_robot.nav_plan(user_instruction)
+        action_return = arx_nav_robot.nav_plan(user_instruction)
 
         # back
-        arx_nav_robot.run_for_1s(chx=-0.5, duration=2.2)
-
-        arx_nav_robot.run_for_1s(chz=-0.5, duration=20.6 - 20.6 / 2.5)
-
-        arx_nav_robot.motion_inversion()
-
-        arx_nav_robot.run_for_1s(chx=0.5, duration=2.5)
-
-        arx_nav_robot.run_for_1s(chz=0.5, duration=10.3)
-
-        arx_nav_robot.run_for_1s(chx=0.5, duration=1.5)
+        arx_nav_robot.nav_back(action_return)
 
         # -- put cup start --
 
