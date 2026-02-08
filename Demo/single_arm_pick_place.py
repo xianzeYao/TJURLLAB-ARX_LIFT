@@ -1,12 +1,16 @@
 from __future__ import annotations
 
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Literal
 
 import cv2
 import numpy as np
 
 from arx_pointing import predict_multi_points_from_rgb
-from demo_utils import draw_text_lines, execute_pick_place_cup_sequence
+from demo_utils import (
+    draw_text_lines,
+    execute_pick_place_cup_sequence,
+    execute_pick_place_straw_sequence,
+)
 from point2pos_utils import load_cam2ref, load_intrinsics, pixel_to_ref_point
 
 import sys
@@ -75,9 +79,9 @@ def single_arm_pick_place(
     pick_prompt: str,
     place_prompt: str,
     arm: str = "left",
+    item_type: Literal["cup", "straw"] = "cup",
     reset_robot: bool = True,
     close_robot: bool = True,
-    confirm: bool = True,
     debug: bool = True,
     go_home: bool = True,
 ) -> Tuple[Optional[np.ndarray], Optional[np.ndarray]]:
@@ -89,7 +93,6 @@ def single_arm_pick_place(
         T_cam2ref = load_cam2ref(side=arm)
 
         while True:
-            confirm_now = confirm and debug
             do_pick = bool(pick_prompt)
             do_place = bool(place_prompt)
             if not do_pick and not do_place:
@@ -150,7 +153,7 @@ def single_arm_pick_place(
                     thickness=2,
                 )
 
-            if confirm_now:
+            if debug:
                 win = "single_arm_pick_place"
                 cv2.namedWindow(win, cv2.WINDOW_NORMAL)
                 cv2.imshow(win, vis)
@@ -163,15 +166,28 @@ def single_arm_pick_place(
             else:
                 cv2.destroyAllWindows()
 
-            execute_pick_place_cup_sequence(
-                arx=arx,
-                pick_ref=pick_ref,
-                place_ref=place_ref,
-                arm=arm,
-                do_pick=do_pick,
-                do_place=do_place,
-                go_home=go_home,
-            )
+            if item_type == "cup":
+                execute_pick_place_cup_sequence(
+                    arx=arx,
+                    pick_ref=pick_ref,
+                    place_ref=place_ref,
+                    arm=arm,
+                    do_pick=do_pick,
+                    do_place=do_place,
+                    go_home=go_home,
+                )
+            elif item_type == "straw":
+                execute_pick_place_straw_sequence(
+                    arx=arx,
+                    pick_ref=pick_ref,
+                    place_ref=place_ref,
+                    arm=arm,
+                    do_pick=do_pick,
+                    do_place=do_place,
+                    go_home=go_home,
+                )
+            else:
+                raise ValueError(f"unknown item_type: {item_type!r}")
             return pick_ref, place_ref
     finally:
         cv2.destroyAllWindows()

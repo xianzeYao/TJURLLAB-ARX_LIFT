@@ -160,7 +160,7 @@ def main():
         print("已跳过回 home，仅启动通讯后采集。")
 
     # 启用重力模式，便于手动拖动末端采样
-    env._set_special_mode(3)
+    env.set_special_mode(3)
     print("已切换至重力模式，可直接拖动末端调整姿态。")
 
     idx = 0

@@ -55,7 +55,7 @@ class ARXRobotEnv():
 
         # 2. Stop the base and lift the base to a safe height
         self.step_lift(0.0)
-        
+
         self.step_base(0.0, 0.0, 0.0, 0.5)
 
         # 3. Get the initial observation
@@ -262,13 +262,13 @@ class ARXRobotEnv():
         if not success:
             print(
                 f"failed to go home: {error_message}, force switch to home mode")
-            self._set_special_mode(1)
+            self.set_special_mode(1)
             return (False, f"failed to go home: {error_message}")
         else:
             print(f"both arms homed")
         return (True, None)
 
-    def _set_special_mode(self, mode: int) -> Tuple[bool, str | None]:
+    def set_special_mode(self, mode: int) -> Tuple[bool, str | None]:
         """Set special mode, e.g. gravity."""
         mode_type = {0: "soft", 1: "home", 2: "protect", 3: "gravity"}
         cmd = RobotCmd()

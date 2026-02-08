@@ -4,9 +4,7 @@ import sys
 sys.path.append("../ARX_Realenv/ROS2")  # noqa
 from arx_ros2_env import ARXRobotEnv  # noqa
 import numpy as np
-from point2pos_utils import load_cam2ref, load_intrinsics, pixel_to_ref_point_safe
-from arx_pointing import predict_point_from_rgb
-from demo_utils import execute_pick_place_straw_sequence
+from single_arm_pick_place import single_arm_pick_place
 
 OPEN = -3.4
 CLOSE = -2.2
@@ -16,36 +14,19 @@ def dual_cup_straw(arx: ARXRobotEnv, cup_side="left", close_robot=True):
     try:
         arx.step_lift(16.0)
         straw_side = "right" if cup_side == "left" else "left"
-        K = load_intrinsics()
-        T = load_cam2ref(side=straw_side)
         pick_straw_prompt = f"the top of the nearest black straw in the cup"
         place_straw_prompt = f"the opening of the center of the cup's opening on the {cup_side} hand"
-        pick_execute = False
-        place_execute = False
-        while not pick_execute:
-            time.sleep(2.0)
-            frames = arx.node.get_camera(
-                target_size=(640, 480), return_status=False)
-            color = frames.get("camera_h_color")
-            depth = frames.get("camera_h_aligned_depth_to_color")
-            u, v = predict_point_from_rgb(
-                color,
-                text_prompt=pick_straw_prompt,
-                assume_bgr=False)
-            predicted_px = (int(round(u)), int(round(v)))
-            raw_depth = depth[predicted_px[1], predicted_px[0]]
-            if np.isnan(raw_depth) or raw_depth == 0:
-                print(
-                    f"预测像素 {predicted_px} 深度无效({raw_depth})，按 r 重新预测")
-                predicted_px = None
-                pt_ref = None
-                continue
-            pt_ref = pixel_to_ref_point_safe(
-                predicted_px, depth, K, T)
-            if pt_ref is not None:
-                pick_execute = True
-            execute_pick_place_straw_sequence(
-                arx, pick_ref=pt_ref, place_ref=None, arm=straw_side, do_pick=True, do_place=False, go_home=False)
+        single_arm_pick_place(
+            arx,
+            pick_prompt=pick_straw_prompt,
+            place_prompt="",
+            arm=straw_side,
+            item_type="straw",
+            reset_robot=False,
+            close_robot=False,
+            debug=True,
+            go_home=False,
+        )
 
         # 右转90度
         arx.step_base(vx=0.0, vy=0.0, vz=-0.5, duration=10.0)
@@ -57,31 +38,17 @@ def dual_cup_straw(arx: ARXRobotEnv, cup_side="left", close_robot=True):
             suit_action = {cup_side: np.array(
                 [0.35, 0.125, -0.05, 0, 0, 1.571, CLOSE], dtype=np.float32)}
         arx.step(suit_action)
-        while not place_execute:
-            time.sleep(2.0)
-            frames = arx.node.get_camera(
-                target_size=(640, 480), return_status=False)
-            color = frames.get("camera_h_color")
-            depth = frames.get("camera_h_aligned_depth_to_color")
-            u, v = predict_point_from_rgb(
-                color,
-                text_prompt=place_straw_prompt,
-                assume_bgr=False)
-            predicted_px = (int(round(u)), int(round(v)))
-            raw_depth = depth[predicted_px[1], predicted_px[0]]
-            if np.isnan(raw_depth) or raw_depth == 0:
-                print(
-                    f"预测像素 {predicted_px} 深度无效({raw_depth})，按 r 重新预测")
-                predicted_px = None
-                pt_ref = None
-                continue
-            pt_ref = pixel_to_ref_point_safe(
-                predicted_px, depth, K, T)
-            if pt_ref is not None:
-                place_execute = True
-            execute_pick_place_straw_sequence(
-                arx, pick_ref=None, place_ref=pt_ref, arm=straw_side, do_pick=False, do_place=True, go_home=False
-            )
+        single_arm_pick_place(
+            arx,
+            pick_prompt="",
+            place_prompt=place_straw_prompt,
+            arm=straw_side,
+            item_type="straw",
+            reset_robot=False,
+            close_robot=False,
+            debug=True,
+            go_home=False,
+        )
         # 拿吸管的手回到初始位姿
         one_arm_home_action = {straw_side: np.array(
             [0, 0, 0, 0, 0, 0, 0], dtype=np.float32)}
