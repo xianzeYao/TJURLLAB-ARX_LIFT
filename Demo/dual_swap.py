@@ -9,6 +9,7 @@ from arx5_arm_msg.msg._robot_cmd import RobotCmd
 from motion_swap import build_swap_sequence  # 控制命令
 from point2pos_utils import load_cam2ref, load_intrinsics, pixel_to_base_point, pixel_to_ref_point_safe
 from arx_pointing import predict_point_from_rgb
+from arm_control.msg._pos_cmd import PosCmd
 
 
 def _get_frame(arx: ARXRobotEnv):
@@ -48,11 +49,12 @@ def main():
         }
         arx.step(close_action)
         time.sleep(1.0)
-        arx.step_base(vx=-0.5, vy=0.0, vz=0.5, duration=9.0)
-        arx.step_base(vx=0.75, vy=0.0, vz=0.0, duration=2.0)
+        # arx.step_base(vx=-0.5, vy=0.0, vz=0.5, duration=9.0)
+        # arx.step_base(vx=0.75, vy=0.0, vz=0.0, duration=2.0)
+        # arx.step_base(vx=-0.5, vy=0.0, vz=0.0, duration=5.0)
         # 简单detect白色纸团
         K = load_intrinsics()
-        T_right = load_cam2ref(side="right")
+        T_left = load_cam2ref(side="left")
         trash_prompt = "a white crumpled paper on the floor"
         while True:
             color, depth = _get_frame(arx)
@@ -62,15 +64,10 @@ def main():
             if not np.isfinite(raw_depth) or raw_depth <= 0:
                 print(f"预测像素 {(u, v)} 深度无效({raw_depth})，按 r 刷新")
                 continue
-            trash_base_point = pixel_to_base_point((u, v), depth, K, T_right)
-            if trash_base_point[0] < 0.5:
-                print(
-                    f"trash_base_point: {trash_base_point}按 e 接受，w 前进，r 刷新，q 退出")
-            else:
-                arx.step_base(vx=0.5, vy=0.0, vz=0.0, duration=1.0)
-                continue
+            trash_base_point = pixel_to_base_point((u, v), depth, K, T_left)
+            print(f"trash_base_point: {trash_base_point}")
             vis = color.copy()
-            cv2.circle(vis, (u, v), 6, (0, 0, 255), -1)
+            cv2.circle(vis, (u, v), 3, (0, 0, 255), -1)
             win = "dual_swap_detect"
             cv2.namedWindow(win, cv2.WINDOW_NORMAL)
             cv2.imshow(win, vis)
@@ -83,9 +80,6 @@ def main():
                 arx.step_base(vx=0.5, vy=0.0, vz=0.0, duration=1.0)
                 continue
             if key == ord("e"):
-                arx.step_base(vx=0.5, vy=0.0, vz=0.0, duration=3.5)
-                trash_base_point[0] -= 0.2
-                print(f"更新后的垃圾点 {trash_base_point}")
                 break
 
         swap_seq = build_swap_sequence(trash_base_point)

@@ -46,7 +46,7 @@ def dual_cup_straw(arx: ARXRobotEnv, cup_side="left", close_robot=True):
             item_type="straw",
             reset_robot=False,
             close_robot=False,
-            debug=True,
+            debug=False,
             go_home=False,
         )
         # 拿吸管的手回到初始位姿

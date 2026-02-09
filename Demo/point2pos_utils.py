@@ -152,7 +152,6 @@ def pixel_to_base_point(
     y_cam = (v - cy) * z / fy
     cam_point = np.array([x_cam, y_cam, z, 1.0], dtype=np.float64)
     base_point = T_cam2ref @ cam_point + BIAS_REF2CAM
-    print(f"bias before: {T_cam2ref @ cam_point}, after: {base_point}")
     return base_point[:2]
 
 

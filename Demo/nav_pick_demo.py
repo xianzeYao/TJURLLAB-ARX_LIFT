@@ -27,7 +27,7 @@ def main():
         arx_nav_robot.arx.step_lift(15.0)
         action_return = arx_nav_robot.nav_plan(user_instruction)
         # place empty cup to making area and pick the bubble tea
-        arx_nav_robot.arx.step_lift(17.3)
+        arx_nav_robot.arx.step_lift(17.5)
         time.sleep(1.5)
         single_arm_pick_place(
             arx_nav_robot.arx,
@@ -52,6 +52,7 @@ def main():
             go_home=False,
         )
         # nav back
+        # arx_nav_robot.back_origin_path(action_return)
         arx_nav_robot.nav_back(action_return)
         # place the bubble tea cup to the customer area and insert a straw
         arx_nav_robot.arx.step_lift(14.0)

@@ -12,7 +12,7 @@ from demo_utils import (
     execute_pick_place_straw_sequence,
 )
 from point2pos_utils import load_cam2ref, load_intrinsics, pixel_to_ref_point
-
+import time
 import sys
 
 sys.path.append("../ARX_Realenv/ROS2")  # noqa
@@ -97,7 +97,7 @@ def single_arm_pick_place(
             do_place = bool(place_prompt)
             if not do_pick and not do_place:
                 raise ValueError("pick_prompt 和 place_prompt 不能同时为空")
-
+            time.sleep(1.5)
             color, depth = _get_frame(arx)
             pick_px = None
             place_px = None
