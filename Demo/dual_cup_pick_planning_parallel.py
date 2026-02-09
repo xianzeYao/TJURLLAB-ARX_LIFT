@@ -175,7 +175,7 @@ def dual_arm_pick_planning_parallel(
             cv2.namedWindow(win, cv2.WINDOW_NORMAL)
 
         while planned and plan_steps:
-            arx.step_lift(13.5)
+            arx.step_lift(13.0)
             time.sleep(1.0)
             frames = arx.node.get_camera(
                 target_size=(640, 480), return_status=False)

@@ -39,7 +39,7 @@ def index_resample(points, num_points=25, gamma=1.8):
 
 def depth_to_meters(raw_depth: float) -> float:
     """兼容毫米与米的深度值。"""
-    if not np.isfinite(raw_depth) or raw_depth <= 0:
+    if not np.isfinite(raw_depth) or raw_depth < 0:
         raise ValueError(f"无效深度值: {raw_depth}")
     if raw_depth > 10.0:
         return float(raw_depth) / 1000.0

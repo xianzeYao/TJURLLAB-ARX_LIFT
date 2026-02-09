@@ -34,14 +34,23 @@ CX, CY = K[0, 2], K[1, 2]
 # 相机 → base_link 外参
 # ===============================
 
-T_CAM2REF = np.array([
+T_CAM2REF_R = np.array([
+    [-0.019024340515354288, -0.5083879840468148, 0.860917959009319, 0.025652315727880005],
+    [-0.9992674280090241, 0.038266714301299354, 0.0005156518327227855, 0.2573767428832648],
+    [-0.033206652769975364, -0.8602774646899676, -0.5087435522524251, 0.1459514185409872],
+    [0.0, 0.0, 0.0, 1.0]
+])
+
+T_CAM2REF_L = np.array([
     [-0.01022451527760726, -0.5071681372702741, 0.861786481574838, 0.019333535519116728],
     [-0.9997376669412061, -0.012479673613300601, -0.019205599325708644, -0.23751223916353767],
     [0.020495282049587504, -0.8617567744348205, -0.5069074916879823, 0.13595597780350663],
     [0.0, 0.0, 0.0, 1.0]
 ])
 
-BIAS_REF2CAM = np.array([0.0, 0.48, 0.0, 0.0])
+BIAS_REF2CAM_L = np.array([0.0, 0.48, 0.0, 0.0])
+
+# BIAS_REF2CAM = np.array([0.0, 0.48, 0.0, 0.0])
 
 class AutoNav_Robot():
     def __init__(self, camera_type="all", camera_view=("camera_h",), img_size=(640, 480)):
@@ -118,20 +127,24 @@ class AutoNav_Robot():
         self.arx.step_lift(self.default_height)
     
     # change pixel to world point
-    def pixel_to_pw(self, pixel, depth):
+    def pixel_to_pw(self, pixel, depth, return_=False):
         u, v = pixel
         z = depth_to_meters(float(depth[int(v), int(u)]))
-        if z <= 0:
-            return None, None
-        
+        while z <= 0:
+            depth = self.get_color_depth()[1]
+            z = depth_to_meters(float(depth[int(v), int(u)]))
         # 像素 → 相机坐标
         x = (u - CX) * z / FX
         y = (v - CY) * z / FY
         Pc = np.array([x, y, z, 1.0], dtype=np.float64)
 
         # 相机 → ref → base_link
-        Pw_right = T_CAM2REF @ Pc
-        Pw = Pw_right + BIAS_REF2CAM
+        if return_:
+            Pw = T_CAM2REF_R @ Pc
+        else:
+            Pw = T_CAM2REF_L @ Pc
+            Pw = Pw + BIAS_REF2CAM_L
+        # Pw = Pw_right + BIAS_REF2CAM
 
         return Pw
     
@@ -148,7 +161,7 @@ class AutoNav_Robot():
     def run_for_1s(self, chx=0.0, chy=0.0, chz=0.0, duration=1.0, record=True):
         v = 0.24 * chx**2
         omega = chz * (2 * math.pi / 20.6)
-
+        
         msg = PosCmd()
         msg.chx = chx
         msg.chy = chy
@@ -189,54 +202,34 @@ class AutoNav_Robot():
                 a = 1
             return
 
+    def judge_goal(self, goal):
+        judge_prompt = f"""Is there a {goal} in the picture? If you think there is no {goal}, output 'False'; if you think there is {goal}, output 'True'."""     
+        color, depth = self.get_color_depth()
+        points, generated_content = predict_multi_points_from_rgb(
+            color,
+            text_prompt="",
+            all_prompt=judge_prompt,
+            base_url="http://172.28.102.11:22002/v1",
+            model_name="Embodied-R1.5-SFT-0128",
+            api_key="EMPTY",
+            assume_bgr=False,
+            return_raw=True
+        )
+
+        print(generated_content)
+
+        if generated_content == "True":
+            return True
+        else:
+            return False
+
     def nav_plan(self, user_instruction):
-        correct_flag = False
-        prompt = f"""
-        You are a robot motion planner. Current goal: {user_instruction}
-        ### Instruction Rules:
-        1. **Task Categories:** Every step must strictly start with the word **Turn** or **Move**.
-        2. **Decomposition Logic:** - To "Go around the left side," you must first Turn Left, then Move Forward-Right to clear the obstacle and see the target.
-        ### Output Format:
-        1. [Action]: [Brief Description]
-        2. ...
-        Please give me the remaining 5 step.
-        """
-        while not correct_flag:
-            color, depth = self.get_color_depth()
-
-            _, generated_content = predict_multi_points_from_rgb(
-                color,
-                text_prompt="",
-                all_prompt=prompt,
-                base_url="http://172.28.102.11:22002/v1",
-                model_name="Embodied-R1.5-SFT-0128",
-                api_key="EMPTY",
-                assume_bgr=False,
-                return_raw=True
-            )
-
-            # print(generated_content)
-
-            actions = extract_actions(generated_content)
-
-            # print(actions)
-            
-            actions = ['Turn Left', 'Move Forward-Right', 'Adjust Position to Face Red Dot', 'Move Directly Toward Red Dot', 'Turn Right to Face Bubble Tea Preparation Area']
-
-            if actions == ['Turn Left', 'Move Forward-Right', 'Adjust Position to Face Red Dot', 'Move Directly Toward Red Dot', 'Turn Right to Face Bubble Tea Preparation Area']:
-                correct_flag = True
-
-        for action in actions:
-            if action == 'Turn Left':
-                self.turn_left(math.pi / 2.0)
-            elif action == 'Move Forward-Right':
-                self.turn_right_corner()
-            elif action == 'Adjust Position to Face Red Dot':
-                self.run_for_1s(chz=-0.5, duration=20.6/6.0)
-                self.go_to_goal("center of red circular landmark on the ground")
-            elif action.startswith("Turn Right"):
-                action_return = self.go_to_table()
-        
+        self.turn_left(math.pi / 2.0)
+        self.turn_right_corner()
+        if not self.judge_goal("center of red circular landmark on the ground"):
+            self.run_for_1s(chz=-0.5, duration=20.6/6.0)
+        self.go_to_goal("center of red circular landmark on the ground")
+        action_return = self.go_to_table()
         return action_return
 
     def turn_left(self, angle):
@@ -247,13 +240,13 @@ class AutoNav_Robot():
     def go_to_table(self):
         self.run_for_1s(chz=-0.5, duration=20.6 / 2.5)
 
-        self.arx.step_lift(17.0)
+        self.arx.step_lift(19.0)
 
-        self.run_for_1s(chx=0.5, duration=2.2)
+        self.run_for_1s(chx=0.5, duration=5.2)
 
         color, depth = self.get_color_depth()
-        points = self.detect_goal(color, "the brown round coaster on the table on the left")
-        goal_pw = self.pixel_to_pw(points[0], depth)
+        points = self.detect_goal(color, "the brown round coaster on edge of the table")
+        goal_pw = self.pixel_to_pw(points[0], depth, return_=True)
         goal_pw[0] += 0.25
         goal_pw[1] -= 0.25
         start = (0, 0)
@@ -410,8 +403,8 @@ Return the result in JSON format as:
             color,
             text_prompt="",
             all_prompt=prompt,
-            base_url="http://172.28.102.11:22002/v1",
-            model_name="Embodied-R1.5-SFT-0128",
+            base_url="http://172.28.102.11:22014/v1",
+            model_name="Qwen3-VL-8B-Instruct",
             api_key="EMPTY",
             temperature=0.2
             # assume_bgr=False
@@ -424,6 +417,8 @@ Return the result in JSON format as:
         for (u, v) in points:
             u += 80
             v += 30
+            u = min(638, u)
+            v = min(478, v)
             cv2.circle(
                 color,
                 center=(int(u), int(v)),
@@ -443,9 +438,9 @@ Return the result in JSON format as:
             Pw = self.pixel_to_pw(point, depth)
             path_xy.append((Pw[0], Pw[1]))
 
-        print(path_xy[:7])
+        print(path_xy[:6])
 
-        self.follow_path(path_xy[:7], lookahead=0.12, v_max=0.15, v_min=0.13, reach_dis=0.09, show_index=True)
+        self.follow_path(path_xy[:6], lookahead=0.12, v_max=0.15, v_min=0.13, reach_dis=0.09, show_index=False)
 
     
     def go_to_goal(self, goal, left_side=False):
@@ -478,11 +473,13 @@ Return the result in JSON format as:
 
         # cv2.imwrite("../Testdata4Nav/test_2.png", color)
 
-        goal_pw = self.pixel_to_pw(points[0], depth)
+        goal_pw = self.pixel_to_pw(points[0], depth, return_=True)
         if left_side:
-            goal_pw[1] -= 0.24
+            goal_pw[1] -= 0.25
             cv2.imwrite("../Testdata4Nav/test_3.png", color)
         else:
+            goal_pw[0] += 0.25
+            goal_pw[1] -= 0.25
             cv2.imwrite("../Testdata4Nav/test_2.png", color)
         start = (0, 0)
         goal = (goal_pw[0], -goal_pw[1])
@@ -494,7 +491,7 @@ Return the result in JSON format as:
         # -- move to goal --
         for action, action_content in actions:
             if action == "forward":
-                self.run_for_1s(chx=1.0, duration=(action_content)/0.245)
+                self.run_for_1s(chx=1.0, duration=(action_content)/0.247)
             elif action == "rotate":
                 if action_content <= 0:
                     self.run_for_1s(chz=-0.5, duration=max(float((-action_content/(0.5 * 2*math.pi / 20.6))) - 0.5, 0.0))
@@ -554,7 +551,7 @@ Return the result in JSON format"""
         revised_points = []
     
         for (u, v) in points:
-            v += 10
+            v += 25
             v = min(478, v)
             cv2.circle(
                 color,
@@ -572,13 +569,15 @@ Return the result in JSON format"""
 
         # -- pixel to wolrd point --
         for point in revised_points:
-            Pw = self.pixel_to_pw(point, depth)
-            path_xy.append((Pw[0], Pw[1]-0.24))
+            Pw = self.pixel_to_pw(point, depth, return_=True)
+            path_xy.append((Pw[0]+0.24, Pw[1]-0.24))
 
         print(path_xy[:7])
 
-        self.follow_path(path_xy[:7], lookahead=0.12, v_max=0.15, v_min=0.13, reach_dis=0.09, show_index=True, return_=True)
-    
+        theta_turn = self.follow_path(path_xy[:7], lookahead=0.12, v_max=0.15, v_min=0.13, reach_dis=0.09, show_index=False, return_=True)
+        
+        return theta_turn
+
     # emergency read keyboard
     def keyboard_listener(self):
         while self.running:
@@ -649,10 +648,11 @@ Return the result in JSON format"""
         rate = self.dt
         final_count = 0
         if return_:
-            max_final_count = (math.hypot(abs(path_xy[-2][0] - path_xy[-1][0]), abs(path_xy[-2][1] - path_xy[-1][1])) / 0.03)
+            max_final_count = (math.hypot(abs(path_xy[-2][0] - path_xy[-1][0]), abs(path_xy[-2][1] - path_xy[-1][1])) / 0.06)
         else:
             max_final_count = (math.hypot(abs(path_xy[-2][0] - path_xy[-1][0]), abs(path_xy[-2][1] - path_xy[-1][1])) / 0.06)
 
+        theta_turn = 0.0
         while self.running:
             # 获取目标点
             x_t, y_t, dist, index = self.get_lookahead_point(path_xy, lookahead, index)
@@ -686,6 +686,7 @@ Return the result in JSON format"""
                 base_status.height) if base_status is not None else 0.0
             msg.mode1 = 1
             self.arx.node.send_base_msg(msg)
+            theta_turn += msg.chz * 0.04
             self.action_log.append((msg.chx, msg.chy, msg.chz, rate))
             # print(math.sqrt(v / 0.24))
             # print(omega / (2 * math.pi / 20.6))
@@ -695,14 +696,17 @@ Return the result in JSON format"""
             time.sleep(rate)
 
         self.stop()
+        print(theta_turn)
+        return theta_turn
 
     # Motion Inversion with Forward-only Constraint
     def motion_inversion(self):
         # turn back
         # self.run_for_1s(chz=-0.5, duration=20.6)
         # print(self.action_log)
-        action_log = self.action_log[1:-5].copy()
-        action_log.append(self.action_log[-4])
+        action_log = self.action_log[1:-6].copy()
+        # print(self.action_log)
+        # action_log.append(self.action_log[-4])
         for chx, chy, chz, duration in reversed(action_log):
             # ignore still motion
             if abs(chx) < 1e-3 and abs(chz) < 1e-3:
@@ -746,22 +750,46 @@ Return the result in JSON format"""
         self.run_for_1s(chz=action_return[0], duration=action_return[1])
 
         # -- step back a little --
-        self.run_for_1s(chx=-0.5, duration=5.5)
+        self.run_for_1s(chx=-0.5, duration=7.2)
         
         # -- turn right --
         self.run_for_1s(chz=-0.5, duration=20.6/2.0)
 
         # -- go to table corner --
-        self.run_for_1s(chx=0.5, duration=11.5)
+        self.run_for_1s(chx=0.5, duration=10.0)
 
         # -- turn left corner --
-        self.turn_left_corner()
+        theta_turn = self.turn_left_corner()
 
         # -- turn left to see landmark --
-        self.run_for_1s(chz=0.5, duration=20.6/6.0)
+        duration_time = ((((math.pi*2.0) / 3.0) - theta_turn) / math.pi) * 20.6
+        if duration_time > 0:
+            self.run_for_1s(chz=0.5, duration=duration_time)
 
         # -- go to landmark
         self.go_to_goal("center of red circular landmark on the ground", left_side=True)
 
         # -- turn left to face the table --
         self.run_for_1s(chz=0.5, duration=((20.6*5.0)/12.0-0.5))
+
+    def back_origin_path(self, action_return):
+
+        print("Go back......")
+
+        # print(action_return)
+
+        self.run_for_1s(chz=action_return[0], duration=action_return[1])
+
+        self.run_for_1s(chx=-0.5, duration=5.2)
+
+        self.run_for_1s(chz=-0.5, duration=20.6 - 20.6 / 2.5)
+
+        self.motion_inversion()
+
+        self.run_for_1s(chx=0.5, duration=6.0)
+
+        self.run_for_1s(chz=0.5, duration=10.3)
+
+
+        
+

@@ -8,10 +8,10 @@ def make_swap_move_action(pt_ref: Optional[np.ndarray],) -> Dict[str, np.ndarray
     """左右臂靠近垃圾"""
     base = np.zeros(3, dtype=np.float32) if pt_ref is None else pt_ref
     action = {"left":  np.array(
-        [base[0], base[1]+SWAP_OFFSET, 0, 0, 0, 0, 0.0],
+        [base[0], base[1]+SWAP_OFFSET, 0.02, 0, 0, 0, 0.0],
         dtype=np.float32),
         "right": np.array(
-            [base[0], base[1]-SWAP_OFFSET, 0, 0, 0, 0, 0.0], dtype=np.float32
+            [base[0], base[1]-SWAP_OFFSET, 0.02, 0, 0, 0, 0.0], dtype=np.float32
     )}
     return action
 
@@ -20,7 +20,7 @@ def make_swap_left_action(pt_ref: Optional[np.ndarray],) -> Dict[str, np.ndarray
     """左臂不动，右臂左移"""
     base = np.zeros(3, dtype=np.float32) if pt_ref is None else pt_ref
     action = {"right":  np.array(
-        [base[0], base[1]+SWAP_OFFSET+0.05, 0, 0, 0, 0, 0.0],
+        [base[0], base[1]+SWAP_OFFSET+0.05, 0.02, 0, 0, 0, 0.0],
         dtype=np.float32)}
     return action
 
@@ -29,7 +29,7 @@ def make_swap_right_action(pt_ref: Optional[np.ndarray],) -> Dict[str, np.ndarra
     """左臂不动，右臂右移"""
     base = np.zeros(3, dtype=np.float32) if pt_ref is None else pt_ref
     action = {"right":  np.array(
-        [base[0], base[1]+SWAP_OFFSET-0.03, 0, 0, 0, 0, 0.0],
+        [base[0], base[1]+SWAP_OFFSET-0.03, 0.02, 0, 0, 0, 0.0],
         dtype=np.float32)}
     return action
 

@@ -29,7 +29,7 @@ def make_pick_robust_action(pt_ref: Optional[np.ndarray], arm: str) -> Dict[str,
     """执行向前移动，准备鲁棒夹取位置，保持不动。"""
     base = np.zeros(3, dtype=np.float32) if pt_ref is None else pt_ref
     active = np.array(
-        [base[0] - GRIPPER_OFFSET+0.02, base[1], base[2], 0, 0, 0, OPEN],
+        [base[0] - GRIPPER_OFFSET+0.03, base[1], base[2], 0, 0, 0, OPEN],
         dtype=np.float32,
     )
     return _make_arm_action(arm, active)
@@ -39,7 +39,7 @@ def make_close_action(pt_ref: Optional[np.ndarray], arm: str) -> Dict[str, np.nd
     """执行夹紧动作，保持不动。"""
     base = np.zeros(3, dtype=np.float32) if pt_ref is None else pt_ref
     active = np.array(
-        [base[0]-GRIPPER_OFFSET+0.02, base[1], base[2], 0, 0, 0, CLOSE],
+        [base[0]-GRIPPER_OFFSET+0.03, base[1], base[2], 0, 0, 0, CLOSE],
         dtype=np.float32,
     )
     return _make_arm_action(arm, active)

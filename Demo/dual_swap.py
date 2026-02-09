@@ -7,7 +7,7 @@ import numpy as np
 import cv2
 from arx5_arm_msg.msg._robot_cmd import RobotCmd
 from motion_swap import build_swap_sequence  # 控制命令
-from point2pos_utils import load_cam2ref, load_intrinsics, pixel_to_base_point
+from point2pos_utils import load_cam2ref, load_intrinsics, pixel_to_base_point, pixel_to_ref_point_safe
 from arx_pointing import predict_point_from_rgb
 
 
@@ -34,21 +34,21 @@ def main():
                           camera_view=("camera_h",),
                           img_size=(640, 480))
         arx.reset()
-        arx.step_lift(10.0)
+        # arx.step_lift(5.0)
         open_action = {
             "left":  np.array([0, 0, 0, 0, 0, 0, -3.4], dtype=np.float32,),
             "right": np.array([0, 0, 0, 0, 0, 0, -3.4], dtype=np.float32),
         }
         arx.step(open_action)
-        print("请放取扫把簸箕，10秒后开始夹取...")
-        time.sleep(10.0)
+        print("请放取扫把簸箕，6秒后开始夹取...")
+        time.sleep(6.0)
         close_action = {
-            "left":  np.array([0, 0, 0, 0, 0, 0, 0.0], dtype=np.float32,),
-            "right": np.array([0, 0, 0, 0, 0, 0, 0.0], dtype=np.float32),
+            "left":  np.array([0, 0, 0.1, 0, 0, 0, 0.0], dtype=np.float32,),
+            "right": np.array([0, 0, 0.1, 0, 0, 0, 0.0], dtype=np.float32),
         }
         arx.step(close_action)
         time.sleep(1.0)
-        arx.step_base(vx=-0.5, vy=0.0, vz=0.5, duration=10.0)
+        arx.step_base(vx=-0.5, vy=0.0, vz=0.5, duration=9.0)
         arx.step_base(vx=0.75, vy=0.0, vz=0.0, duration=2.0)
         # 简单detect白色纸团
         K = load_intrinsics()
@@ -63,7 +63,12 @@ def main():
                 print(f"预测像素 {(u, v)} 深度无效({raw_depth})，按 r 刷新")
                 continue
             trash_base_point = pixel_to_base_point((u, v), depth, K, T_right)
-            print(f"trash_base_point: {trash_base_point}")
+            if trash_base_point[0] < 0.5:
+                print(
+                    f"trash_base_point: {trash_base_point}按 e 接受，w 前进，r 刷新，q 退出")
+            else:
+                arx.step_base(vx=0.5, vy=0.0, vz=0.0, duration=1.0)
+                continue
             vis = color.copy()
             cv2.circle(vis, (u, v), 6, (0, 0, 255), -1)
             win = "dual_swap_detect"
@@ -74,20 +79,25 @@ def main():
                 continue
             if key == ord("q"):
                 return
+            if key == ord("w"):
+                arx.step_base(vx=0.5, vy=0.0, vz=0.0, duration=1.0)
+                continue
             if key == ord("e"):
+                arx.step_base(vx=0.5, vy=0.0, vz=0.0, duration=3.5)
+                trash_base_point[0] -= 0.2
+                print(f"更新后的垃圾点 {trash_base_point}")
                 break
-        
-        # 移动过去
-        # TODO: 这里可以做点导航
-        # 扫
+
         swap_seq = build_swap_sequence(trash_base_point)
         for action in swap_seq:
             arx.step(action)
-        time.sleep(10.0)
+
     except Exception as e:
         print(f"An error occurred: {e}")
     finally:
+        arx.step(open_action)
         cv2.destroyAllWindows()
+        time.sleep(5.0)
         arx.close()
 
 

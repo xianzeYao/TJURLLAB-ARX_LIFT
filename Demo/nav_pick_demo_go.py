@@ -20,14 +20,15 @@ def main():
         """
         # dual arm pick planning and execute sequencly or parallelly
         # dual_arm_pick_planning(
-        #     arx_nav_robot.arx, goal="red cup", reset_robot=False, close_robot=False, no_last_place=True)
+        # arx_nav_robot.arx, goal="red cup", reset_robot=False, close_robot=False, no_last_place=True)
         dual_arm_pick_planning_parallel(
-            arx_nav_robot.arx, goal="red cup", reset_robot=False, close_robot=False, no_last_place=True)
+            arx_nav_robot.arx, goal="red cup", reset_robot=False, close_robot=False, no_last_place=True, single_test=True)
         # nav go
         arx_nav_robot.arx.step_lift(15.0)
         action_return = arx_nav_robot.nav_plan(user_instruction)
         # place empty cup to making area and pick the bubble tea
-        arx_nav_robot.arx.step_lift(17.0)
+        arx_nav_robot.arx.step_lift(17.3)
+        time.sleep(1.5)
         single_arm_pick_place(
             arx_nav_robot.arx,
             arm="right",
