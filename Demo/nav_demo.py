@@ -16,8 +16,10 @@ def main():
         # # arx_nav_robot.run_for_1s(chx=1.0, duration=1.0)
         action_return = arx_nav_robot.nav_plan(user_instruction)
 
+        arx_nav_robot.arx.step_lift(15.0)
+
         # # back
-        arx_nav_robot.back_origin_path(action_return)
+        arx_nav_robot.nav_back(action_return)
 
         # -- put cup start --
 

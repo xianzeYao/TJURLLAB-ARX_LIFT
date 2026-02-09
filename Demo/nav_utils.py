@@ -6,6 +6,59 @@ from typing import List, Tuple
 import math
 import re
 
+def refine_trajectory_strict(points, img_height=1000, img_width=1000):
+    """
+    1. 起点下移：确保起点在底部 20% 区域。
+    2. 跨度约束：确保 Y 跨度在 40% 到 50% 之间。
+    3. X 轴强制递减：从第一点开始持续向左偏。
+    4. 末端平滑回钩：y(7) > y(6)。
+    """
+    pts = np.array(points, dtype=float)
+    
+    # --- 1. 整体偏移向下 (起点修正) ---
+    y_threshold = img_height * 0.8
+    if pts[0, 1] < y_threshold:
+        offset_y = y_threshold - pts[0, 1]
+        pts[:, 1] += offset_y
+
+    # --- 2. Y 坐标跨度约束 (40% - 50%) ---
+    y_min, y_max = np.min(pts[:, 1]), np.max(pts[:, 1])
+    y_span = y_max - y_min
+    
+    max_allowed_span = img_height * 0.4
+    min_allowed_span = img_height * 0.3
+    
+    # 情况 A: 跨度太大 -> 压缩
+    if y_span > max_allowed_span:
+        scale = max_allowed_span / y_span
+        pts[:, 1] = y_max - (y_max - pts[:, 1]) * scale
+    # 情况 B: 跨度太小 -> 拉伸
+    elif y_span < min_allowed_span and y_span > 0:
+        scale = min_allowed_span / y_span
+        pts[:, 1] = y_max - (y_max - pts[:, 1]) * scale
+
+    # --- 3. X 坐标强制递减逻辑 ---
+    x_step_min = img_width * 0.02  # 每步最小左偏 2%
+    for i in range(1, len(pts)):
+        if pts[i, 0] > (pts[i-1, 0] - x_step_min):
+            pts[i, 0] = pts[i-1, 0] - x_step_min
+
+    # --- 4. 末端修正 (索引 5, 6, 7) ---
+    # 加大末端左偏力度
+    for i in range(5, 8):
+        pts[i, 0] = np.minimum(pts[i, 0], pts[i-1, 0] - img_width * 0.04)
+
+    # 修正 Y 轴：使变化平缓并形成回钩
+    # 注意：这里使用 pts[5,1] + 小增量 确保 y 坐标变大（即向下移动）
+    pts[6, 1] = pts[5, 1] + abs(pts[5, 1] - pts[4, 1]) * 0.1 
+    pts[7, 1] = pts[6, 1] + 10 
+
+    # 5. 边界保护
+    pts[:, 0] = np.clip(pts[:, 0], 0, img_width - 1)
+    pts[:, 1] = np.clip(pts[:, 1], 0, img_height - 1)
+    
+    return pts.tolist()
+
 def extract_actions(instruction_str):
     # Step 1: Use regular expression to extract lines that represent actions
     action_lines = re.findall(r'\d+\.\s*(.*)', instruction_str)

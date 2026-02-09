@@ -1,4 +1,4 @@
-from nav_utils import depth_to_meters, get_key, extract_actions, merge_forward_actions, path_to_actions
+from nav_utils import depth_to_meters, get_key, extract_actions, merge_forward_actions, path_to_actions, refine_trajectory_strict
 # from qwen3_vl_8b_tool import predict_point_from_rgb
 from arx_pointing import predict_multi_points_from_rgb
 
@@ -53,7 +53,7 @@ BIAS_REF2CAM_L = np.array([0.0, 0.48, 0.0, 0.0])
 # BIAS_REF2CAM = np.array([0.0, 0.48, 0.0, 0.0])
 
 class AutoNav_Robot():
-    def __init__(self, camera_type="all", camera_view=("camera_h",), img_size=(640, 480)):
+    def __init__(self, camera_type="all", camera_view=("camera_h",), img_size=(640, 480), golden_point=False):
         # -- arx robot env --
         self.arx = ARXRobotEnv(
             duration_per_step=1.0 / 20.0,
@@ -70,8 +70,17 @@ class AutoNav_Robot():
 
         obs = self.arx.reset()
 
+        # -- golden points --
+        # go
+        self.go_points = [(346, 423), (371, 400), (399, 376), (431, 353), (463, 333), (495, 317), (527, 306), (578, 293)]
+
+        # return
+        self.return_points = [(304, 401), (292, 371), (280, 330), (260, 301), (226, 283), (188, 267), (148, 269), (116, 280)]
+
         # -- emergency stop --
         self.running = True
+
+        self.golden_point = golden_point
         
         # -- initial pose information --
         self.x_r = 0.0
@@ -242,7 +251,7 @@ class AutoNav_Robot():
 
         self.arx.step_lift(19.0)
 
-        self.run_for_1s(chx=0.5, duration=5.2)
+        self.run_for_1s(chx=0.5, duration=6.0)
 
         color, depth = self.get_color_depth()
         points = self.detect_goal(color, "the brown round coaster on edge of the table")
@@ -434,6 +443,8 @@ Return the result in JSON format as:
         path_xy = []
 
         # -- pixel to wolrd point --
+        if self.golden_point:
+            revised_points = self.go_points
         for point in revised_points:
             Pw = self.pixel_to_pw(point, depth)
             path_xy.append((Pw[0], Pw[1]))
@@ -475,6 +486,7 @@ Return the result in JSON format as:
 
         goal_pw = self.pixel_to_pw(points[0], depth, return_=True)
         if left_side:
+            goal_pw[0] += 0.25
             goal_pw[1] -= 0.25
             cv2.imwrite("../Testdata4Nav/test_3.png", color)
         else:
@@ -491,7 +503,7 @@ Return the result in JSON format as:
         # -- move to goal --
         for action, action_content in actions:
             if action == "forward":
-                self.run_for_1s(chx=1.0, duration=(action_content)/0.247)
+                self.run_for_1s(chx=1.0, duration=(action_content-0.02)/0.247)
             elif action == "rotate":
                 if action_content <= 0:
                     self.run_for_1s(chz=-0.5, duration=max(float((-action_content/(0.5 * 2*math.pi / 20.6))) - 0.5, 0.0))
@@ -522,37 +534,107 @@ Return the result in JSON format as:
         print("Turn left corner......")
         self.initialize_pose()
         color, depth = self.get_color_depth()
-        prompt = """Task
-Given an image captured from a top-mounted robot camera, use 2D points to trace the movement trajectory as it moves.
-Trajectory requirements
-Output exactly 8 points on the ground (floor) that form a single continuous trajectory.
-The first point must be at the bottom center of the image, representing the robot’s current position.
-The last point must be located on the left image boundary, below the vertical midpoint (to complete the bypass).
-The trajectory must represent a clear forward motion first, followed by a left turn to navigate around the table on the left.
-The first 2–3 points should lie approximately on a straight forward path to establish clearance before initiating the turn.
-The left turn should start mid-trajectory, angling toward the left boundary to successfully bypass the obstacle.
-Surface Constraint: All points, especially the final destination point, must be located strictly within the blue floor area. Avoid any points overlapping with the table or non-floor surfaces.
-Output format:
-Return the result in JSON format"""
+        # -- one --
+#         prompt = """Task
+# Given an image captured from a top-mounted robot camera, use 2D points to trace the movement trajectory as it moves.
+# Trajectory requirements
+# Output exactly 8 points on the ground (floor) that form a single continuous trajectory.
+# The first point must be at the bottom center of the image, representing the robot’s current position.
+# The last point must be located on the left image boundary, below the vertical midpoint (to complete the bypass).
+# The trajectory must represent a clear forward motion first, followed by a left turn to navigate around the table on the left.
+# The first 2–3 points should lie approximately on a straight forward path to establish clearance before initiating the turn.
+# The left turn should start mid-trajectory, angling toward the left boundary to successfully bypass the obstacle.
+# Surface Constraint: All points, especially the final destination point, must be located strictly within the blue floor area. Avoid any points overlapping with the table or non-floor surfaces.
+# Output format:
+# Return the result in JSON format"""
 
-        points = predict_multi_points_from_rgb(
-            color,
-            text_prompt="",
-            all_prompt=prompt,
-            base_url="http://172.28.102.11:22002/v1",
-            model_name="Embodied-R1.5-SFT-0128",
-            api_key="EMPTY",
-            temperature=0.2,
-            assume_bgr=False
-        )
+#         points = predict_multi_points_from_rgb(
+#             color,
+#             text_prompt="",
+#             all_prompt=prompt,
+#             base_url="http://172.28.102.11:22002/v1",
+#             model_name="Embodied-R1.5-SFT-0128",
+#             api_key="EMPTY",
+#             temperature=0.2,
+#             assume_bgr=False
+#         )
+
+        # -- two --
+        # prompt = """
+        #     Task
+        # Given an image captured from a top-mounted robot camera, use 2D points to trace the movement trajectory as it moves.
+        # Trajectory requirements
+        # Output exactly 8 points on the ground (floor) that form a single continuous trajectory.
+        # The first point must be at the bottom center of the image.
+        # The last point must be located on the left image boundary, below the vertical midpoint (to complete the bypass).
+        # The trajectory must represent a clear forward motion first, followed by a left turn to navigate around the table on the left.
+        # The first 2–3 points should lie approximately on a straight forward path to establish clearance before initiating the turn.
+        # The left turn should start mid-trajectory, angling toward the left boundary to successfully bypass the obstacle.
+        # Smooth Curve: The path should form a continuous smooth arc leaning left, avoiding any straight vertical segments at the start.
+        # Surface Constraint: All points, especially the final destination point, must be located strictly within the blue floor area. Avoid any points overlapping with the table or non-floor surfaces.
+        # Output format:
+        # Return the result in JSON format
+        # """
+        
+        # points_ = predict_multi_points_from_rgb(
+        #     color,
+        #     text_prompt="",
+        #     all_prompt=prompt,
+        #     base_url="http://172.28.102.11:22002/v1",
+        #     model_name="Embodied-R1.5-SFT-0128",
+        #     api_key="EMPTY",
+        #     temperature=0.2,
+        #     assume_bgr=False
+        # )
+        # w, h = color.shape[:2]
+        # points=points_
+        # points=refine_trajectory_strict(points_,w,h)
+
+        # -- three --
+        prompt = """Task
+    Given an image captured from a top-mounted robot camera, use 2D points to trace the movement trajectory as it moves.
+    Trajectory requirements
+    Output exactly 8 points on the ground (floor) that form a single continuous trajectory.
+    The first point must be at the bottom center of the image, representing the robot’s current position.
+    The last point must be located on the left image boundary, below the vertical midpoint (to complete the bypass).
+    The trajectory must represent a clear forward motion first, followed by a left turn to navigate around the table on the left.
+    The first 2–3 points should lie approximately on a straight forward path to establish clearance before initiating the turn.
+    The left turn should start mid-trajectory, angling toward the left boundary to successfully bypass the obstacle.
+    Surface Constraint: All points, especially the final destination point, must be located strictly within the blue floor area. Avoid any points overlapping with the table or non-floor surfaces.
+    Output format:
+    Return the result in JSON format"""
+
+        points_all = []
+        for i in range(10):
+            points = predict_multi_points_from_rgb(
+                color,
+                text_prompt="",
+                all_prompt=prompt,
+                base_url="http://172.28.102.11:22002/v1",
+                model_name="Embodied-R1.5-SFT-0128",
+                api_key="EMPTY",
+                assume_bgr=False
+            )
+            points_all.append(points)
+        
+        points_all_np = np.array(points_all, dtype=np.float32)
+        # shape: (10, 8, 2)
+
+        # 对 10 次取平均
+        points_avg = points_all_np.mean(axis=0)
+        # shape: (8, 2)
+
+        # 转回 python list
+        points = [(float(u), float(v)) for u, v in points_avg]
+
+        w, h = color.shape[:2]
+        points=refine_trajectory_strict(points,w,h)
 
         order_num = 0.0
 
         revised_points = []
     
         for (u, v) in points:
-            v += 25
-            v = min(478, v)
             cv2.circle(
                 color,
                 center=(int(u), int(v)),
@@ -566,6 +648,9 @@ Return the result in JSON format"""
         cv2.imwrite("../Testdata4Nav/test_4.png", color)
 
         path_xy = []
+
+        if self.golden_point:
+            revised_points = self.return_points
 
         # -- pixel to wolrd point --
         for point in revised_points:
@@ -648,7 +733,7 @@ Return the result in JSON format"""
         rate = self.dt
         final_count = 0
         if return_:
-            max_final_count = (math.hypot(abs(path_xy[-2][0] - path_xy[-1][0]), abs(path_xy[-2][1] - path_xy[-1][1])) / 0.06)
+            max_final_count = (math.hypot(abs(path_xy[-2][0] - path_xy[-1][0]), abs(path_xy[-2][1] - path_xy[-1][1])) / 0.05)
         else:
             max_final_count = (math.hypot(abs(path_xy[-2][0] - path_xy[-1][0]), abs(path_xy[-2][1] - path_xy[-1][1])) / 0.06)
 
@@ -756,15 +841,13 @@ Return the result in JSON format"""
         self.run_for_1s(chz=-0.5, duration=20.6/2.0)
 
         # -- go to table corner --
-        self.run_for_1s(chx=0.5, duration=10.0)
+        self.run_for_1s(chx=0.5, duration=12.5)
 
         # -- turn left corner --
         theta_turn = self.turn_left_corner()
 
         # -- turn left to see landmark --
-        duration_time = ((((math.pi*2.0) / 3.0) - theta_turn) / math.pi) * 20.6
-        if duration_time > 0:
-            self.run_for_1s(chz=0.5, duration=duration_time)
+        self.run_for_1s(chz=0.5, duration=20.6/3.0)
 
         # -- go to landmark
         self.go_to_goal("center of red circular landmark on the ground", left_side=True)
@@ -789,6 +872,8 @@ Return the result in JSON format"""
         self.run_for_1s(chx=0.5, duration=6.0)
 
         self.run_for_1s(chz=0.5, duration=10.3)
+
+
 
 
         

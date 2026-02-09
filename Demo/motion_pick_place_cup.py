@@ -2,11 +2,11 @@ import numpy as np
 from typing import Dict, Optional
 
 CLOSE = 0.0
-OPEN = -3.0
+OPEN = -2.9
 GRIPPER_OFFSET = 0.15
-GRIPPER_CUP = -2.0
+GRIPPER_CUP = -2.1
+# GRIPPER_CUP = -1.9 # for pick
 Z_CUP = 0.045
-# Z_CUP = 0.07
 
 
 def _make_arm_action(arm: str, active: np.ndarray) -> Dict[str, np.ndarray]:
@@ -21,7 +21,7 @@ def make_pick_move_action(pt_ref: Optional[np.ndarray], arm: str) -> Dict[str, n
     """张开夹爪偏移到目标附近，保持不动。"""
     base = np.zeros(3, dtype=np.float32) if pt_ref is None else pt_ref
     active = np.array(
-        [base[0] - GRIPPER_OFFSET-0.03, base[1], base[2]+0.01, 0, 0, 0, -3.4],
+        [base[0] - GRIPPER_OFFSET-0.03, base[1], base[2]+0.01, 0, 0, 0, OPEN],
         dtype=np.float32,
     )
     return _make_arm_action(arm, active)
@@ -31,7 +31,7 @@ def make_pick_robust_action(pt_ref: Optional[np.ndarray], arm: str) -> Dict[str,
     """执行向前移动，准备鲁棒夹取位置，保持不动。"""
     base = np.zeros(3, dtype=np.float32) if pt_ref is None else pt_ref
     active = np.array(
-        [base[0] - GRIPPER_OFFSET + 0.025, base[1], base[2]+0.01, 0, 0, 0, -3.4],
+        [base[0] - GRIPPER_OFFSET + 0.025, base[1], base[2]+0.01, 0, 0, 0, OPEN],
         dtype=np.float32,
     )
     return _make_arm_action(arm, active)
@@ -74,7 +74,7 @@ def make_place_move_action(pt_ref: Optional[np.ndarray], arm: str) -> Dict[str, 
     base = np.zeros(3, dtype=np.float32) if pt_ref is None else pt_ref
     active = np.array(
         [base[0] - GRIPPER_OFFSET-0.05, base[1],
-         base[2] + Z_CUP+0.04, 0, 0, 0, GRIPPER_CUP],
+         base[2] + Z_CUP+0.06, 0, 0, 0, GRIPPER_CUP],
         dtype=np.float32,
     )
     return _make_arm_action(arm, active)
@@ -85,7 +85,7 @@ def make_place_robust_action(pt_ref: Optional[np.ndarray], arm: str) -> Dict[str
     base = np.zeros(3, dtype=np.float32) if pt_ref is None else pt_ref
     active = np.array(
         [base[0] - GRIPPER_OFFSET-0.01, base[1],
-         base[2] + Z_CUP+0.04, 0, 0, 0, GRIPPER_CUP],
+         base[2] + Z_CUP+0.06, 0, 0, 0, GRIPPER_CUP],
         dtype=np.float32,
     )
     return _make_arm_action(arm, active)

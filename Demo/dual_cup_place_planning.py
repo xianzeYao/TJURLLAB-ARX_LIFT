@@ -31,14 +31,29 @@ from point2pos_utils import (
 sys.path.append("../ARX_Realenv/ROS2")  # noqa
 from arx_ros2_env import ARXRobotEnv  # noqa
 
-PLACE_PROMPT_BLACK1 = "The center of the leftmost black coaster has no cup on it."
-PLACE_PROMPT_BLACK2 = "The center of the rightmost black coaster has no cup on it."
-PLACE_PROMPT_BLACK3 = "The center of the middle black coaster has no cup on it."
-PLACE_PROMPTS_BLACK = (
-    PLACE_PROMPT_BLACK1,
-    PLACE_PROMPT_BLACK2,
-    PLACE_PROMPT_BLACK3,
+PLACE_PROMPT_COASTER1 = (
+    "The exact center of the leftmost coaster that has no cup on it. "
+    "Return only JSON: [{\"point_2d\": [x, y]}]."
 )
+PLACE_PROMPT_COASTER2 = (
+    "The exact center of the rightmost coaster that has no cup on it. "
+    "Return only JSON: [{\"point_2d\": [x, y]}]."
+)
+PLACE_PROMPT_COASTER3 = (
+    "The exact center of the middle coaster that has no cup on it. "
+    "Return only JSON: [{\"point_2d\": [x, y]}]."
+)
+PLACE_PROMPTS_COASTER = (
+    PLACE_PROMPT_COASTER1,
+    PLACE_PROMPT_COASTER2,
+    PLACE_PROMPT_COASTER3,
+)
+
+LLM_TEMPERATURE = 0.0
+LLM_TOP_P = 1.0
+LLM_SEED = 3407
+LLM_MAX_TOKENS = 256
+PLACE_V_BIAS_PX = 0.0
 
 
 def _arm_for_cycle(cycle_idx: int) -> str:
@@ -67,11 +82,11 @@ def _is_combined_stage(cycle_idx: int) -> bool:
 def _desc_prompt(arm: str) -> str:
     if arm == "left":
         return (
-            "Describe the cup on the left side which is not on the black coaster and not on other cups. "
+            "Describe the nearest cup on the left side which is not on the black coaster and not on other cups. "
             "Output format like: red cup."
         )
     return (
-        "Describe the cup on the right side which is not on the black coaster and not on other cups. "
+        "Describe the nearest cup on the right side which is not on the black coaster and not on other cups. "
         "Output format like: red cup."
     )
 
@@ -96,6 +111,10 @@ def describe_cup(color: np.ndarray, arm: str) -> str:
         all_prompt=prompt,
         assume_bgr=False,
         return_raw=True,
+        temperature=LLM_TEMPERATURE,
+        top_p=LLM_TOP_P,
+        seed=LLM_SEED,
+        max_tokens=LLM_MAX_TOKENS,
     )
     return _clean_desc(raw_text)
 
@@ -106,16 +125,24 @@ def predict_pick_point(color: np.ndarray, desc: str) -> Tuple[int, int]:
         color,
         text_prompt=pick_prompt,
         assume_bgr=False,
+        temperature=LLM_TEMPERATURE,
+        top_p=LLM_TOP_P,
+        seed=LLM_SEED,
+        max_tokens=LLM_MAX_TOKENS,
     )
     return int(round(u)), int(round(v))
 
 
-def predict_place_black(color: np.ndarray, idx: int) -> Tuple[int, int]:
-    prompt = PLACE_PROMPTS_BLACK[idx]
+def predict_place_coaster(color: np.ndarray, idx: int) -> Tuple[int, int]:
+    prompt = PLACE_PROMPTS_COASTER[idx]
     u, v = predict_point_from_rgb(
         color,
         text_prompt=prompt,
         assume_bgr=False,
+        temperature=LLM_TEMPERATURE,
+        top_p=LLM_TOP_P,
+        seed=LLM_SEED,
+        max_tokens=LLM_MAX_TOKENS,
     )
     return int(round(u)), int(round(v))
 
@@ -139,9 +166,14 @@ def predict_place_from_queue(
         all_prompt=prompt,
         assume_bgr=False,
         return_raw=True,
+        temperature=LLM_TEMPERATURE,
+        top_p=LLM_TOP_P,
+        seed=LLM_SEED,
+        max_tokens=LLM_MAX_TOKENS,
     )
     raw_uvs = raw_uvs[:2]
-    uv_ints = [(int(round(u)), int(round(v+2.5))) for (u, v) in raw_uvs]
+    uv_ints = [(int(round(u)), int(round(v + PLACE_V_BIAS_PX)))
+               for (u, v) in raw_uvs]
     valid_uvs, valid_refs = filter_valid_points(uv_ints, depth, K, T_cam2ref)
     if len(valid_uvs) < 2:
         print("需要至少 2 个有效放置参考点，按 r 重新预测")
@@ -166,7 +198,6 @@ def dual_cup_place_planning(
 
     K = load_intrinsics()
     T_left, T_right = load_cam2ref()
-
     picked_queue = deque()
     queue_place_count = 0
 
@@ -220,6 +251,7 @@ def dual_cup_place_planning(
                     current_pick_ref = pixel_to_ref_point(
                         current_pick_uv, pick_depth, K, T_cam2ref
                     )
+                    current_pick_ref[0] += 0.01
                     print(
                         f"pick 预测像素 {current_pick_uv} -> ref {current_pick_ref.tolist()}，按 e 执行"
                     )
@@ -239,9 +271,9 @@ def dual_cup_place_planning(
                         continue
 
                     if place_idx < 3:
-                        predicted_place_uv = predict_place_black(
+                        predicted_place_uv = predict_place_coaster(
                             place_color, place_idx)
-                        place_prompt = PLACE_PROMPTS_BLACK[place_idx]
+                        place_prompt = PLACE_PROMPTS_COASTER[place_idx]
                         attachment_uvs = None
                         raw_depth = place_depth[
                             predicted_place_uv[1], predicted_place_uv[0]
@@ -256,6 +288,7 @@ def dual_cup_place_planning(
                         place_ref = pixel_to_ref_point(
                             predicted_place_uv, place_depth, K, T_cam2ref
                         )
+                        place_ref[0] += 0.01
                         use_queue_place = False
                     else:
                         use_queue_place = True
@@ -286,6 +319,8 @@ def dual_cup_place_planning(
                             K,
                             T_cam2ref,
                         )
+                        if place_ref is not None:
+                            place_ref[0] += 0.01
                         if place_ref is None:
                             continue
 
@@ -351,6 +386,11 @@ def dual_cup_place_planning(
                         print("当前未预测到足够点，按 r 重新预测。")
                         continue
                     arx.step_lift(13.5)
+                    current_pick_ref[2] += 0.02
+                    if cycle_idx == 0:
+                        current_pick_ref[2] -= 0.01
+                    if cycle_idx == 2:
+                        current_pick_ref[2] += 0.01
                     execute_pick_place_cup_sequence(
                         arx=arx,
                         pick_ref=current_pick_ref,
