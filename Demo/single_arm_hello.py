@@ -88,10 +88,9 @@ def hello(arx: ARXRobotEnv, side="left", close_robot=True, wave_cycles: int = 1)
 
 def main():
     arx = ARXRobotEnv(duration_per_step=1.0/40.0,  # 就是插值里一步的时间，20Hz也就是0.05s
-                      min_steps_per_action=60,  # 每个动作至少插值60步，理论上来说越大越好
-                      min_steps_gripper=20,  # 夹爪插值步数最少20步
-                      max_v_xyz=0.15,
-                      max_v_rpy=0.3,
+                      min_steps=20,
+                      max_v_xyz=0.25, max_a_xyz=0.20,
+                      max_v_rpy=0.3, max_a_rpy=1.00,
                       camera_type="all",
                       camera_view=("camera_h",),
                       img_size=(640, 480))

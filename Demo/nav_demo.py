@@ -5,7 +5,7 @@ import cv2
 import math
 
 def main():
-    arx_nav_robot = AutoNav_Robot()
+    arx_nav_robot = AutoNav_Robot(golden_point=True)
     try:
         user_instruction = """
         Now I need you to navigate to the bubble tea preparation area.
@@ -14,12 +14,12 @@ def main():
         """
         # # go
         # # arx_nav_robot.run_for_1s(chx=1.0, duration=1.0)
-        action_return = arx_nav_robot.nav_plan(user_instruction)
+        action_return, turn_right_action_log = arx_nav_robot.nav_plan(user_instruction)
 
         arx_nav_robot.arx.step_lift(15.0)
 
         # # back
-        arx_nav_robot.nav_back(action_return)
+        arx_nav_robot.(action_return, turn_right_action_log)
 
         # -- put cup start --
 

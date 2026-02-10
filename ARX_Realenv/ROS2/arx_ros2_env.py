@@ -17,22 +17,26 @@ class ARXRobotEnv():
     Concrete implementation of BasetEnv for ARX robot.
     """
 
-    def __init__(self, duration_per_step: float = 0.02, min_steps_per_action: int = 2,
-                 max_v_xyz: float = 0.05, max_v_rpy: float = 0.3,
+    def __init__(self, duration_per_step: float = 0.02, min_steps: int = 10,
+                 max_v_xyz: float = 0.25, max_v_rpy: float = 0.3,
+                 max_a_xyz: float = 0.20, max_a_rpy: float = 1.00,
+                 max_j_xyz: Optional[float] = None, max_j_rpy: Optional[float] = None,
                  camera_type: Literal["color", "depth", "all"] = "all", camera_view: Iterable[str] = ("camera_l", "camera_h", "camera_r"),
-                 dir: Optional[str] = None, img_size: Optional[Tuple[int, int]] = (224, 224),
-                 min_steps_gripper: int = 10):
+                 dir: Optional[str] = None, img_size: Optional[Tuple[int, int]] = (224, 224)):
         super().__init__()
         self.camera_view = camera_view
         self.camera_type = camera_type
         self.dir = dir
         self.img_size = img_size
         self.duration_per_step = duration_per_step
-        self.min_steps_per_action = min_steps_per_action
+        self.min_steps = min_steps
 
         self.max_v_xyz = max_v_xyz
         self.max_v_rpy = max_v_rpy
-        self.min_steps_gripper = min_steps_gripper
+        self.max_a_xyz = max_a_xyz
+        self.max_a_rpy = max_a_rpy
+        self.max_j_xyz = max_j_xyz
+        self.max_j_rpy = max_j_rpy
 
         # 1. Enable the robot
         success, error_message = self._enable_robot()
@@ -209,16 +213,17 @@ class ARXRobotEnv():
 
         """
         curr_obs = self.get_observation()
-        steps_by_side, pose_changed = compute_interp_steps(
+        limits = {
+            "xyz": {"v": self.max_v_xyz, "a": self.max_a_xyz, "j": self.max_j_xyz},
+            "rpy": {"v": self.max_v_rpy, "a": self.max_a_rpy, "j": self.max_j_rpy},
+        }
+        sequences = plan_action_sequences(
             curr_obs,
             action,
-            self.max_v_xyz,
-            self.max_v_rpy,
             self.duration_per_step,
-            self.min_steps_per_action,
-            self.min_steps_gripper,
+            limits,
+            self.min_steps,
         )
-        sequences = interpolate_action(curr_obs, action, steps_by_side)
         lsequence = sequences.get("left") or []
         rsequence = sequences.get("right") or []
         max_len = max(len(lsequence), len(rsequence))
@@ -331,20 +336,38 @@ class ARXRobotEnv():
 
 
 def main():
-    arx = ARXRobotEnv(duration_per_step=1.0/20.0,
-                      min_steps_per_action=60,
-                      min_steps_gripper=20,
+    arx = ARXRobotEnv(
+        duration_per_step=1.0/20.0,
+        min_steps=20,
+        max_v_xyz=0.25, max_a_xyz=0.20,
+        max_v_rpy=0.3, max_a_rpy=1.00,
+        camera_type="all",
+        camera_view=("camera_h",),
+        dir="testdata",
+        img_size=(640, 480)
+    )
 
-                      max_v_xyz=0.15,
-                      max_v_rpy=0.3,
-                      camera_type="all",
-                      camera_view=("camera_h",),
-                      dir="testdata",
-                      img_size=(640, 480))
+    # arx = ARXRobotEnv(duration_per_step=1.0/20.0,
+    #                   min_steps=20,
+    #                   max_v_xyz=0.25, max_a_xyz=0.20,
+    #                   max_v_rpy=0.3, max_a_rpy=1.00,
+    #                   camera_type="all",
+    #                   camera_view=("camera_h",),
+    #                   dir="testdata",
+    #                   img_size=(640, 480))
 
     obs = arx.reset()
     arx.step_lift(18.0)
-    time.sleep(30.0)
+    action = {
+        "left": np.array([0.1, 0, 0.15, 0, 0, 0, -2.0], dtype=np.float32),
+        "right": np.array([0.1, 0, 0.15, 0, 0, 0, -2.0], dtype=np.float32),
+    }
+    arx.step(action)
+    action = {
+        "left": np.array([0.2, 0, 0.17, 0, 0, 0, -3.4], dtype=np.float32),
+        "right": np.array([0.2, 0, 0.17, 0, 0, 0, -3.4], dtype=np.float32),
+    }
+    arx.step(action)
     arx.close()
 
 

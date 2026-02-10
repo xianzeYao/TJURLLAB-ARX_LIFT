@@ -304,81 +304,145 @@ def build_observation(
     return obs
 
 
-def compute_interp_steps(curr_obs: Dict[str, np.ndarray],
-                         action: Dict[str, np.ndarray],
-                         max_v_xyz: float,
-                         max_v_rpy: float,
-                         duration_per_step: float,
-                         min_steps_per_action: int,
-                         min_steps_gripper: int) -> tuple[Dict[str, tuple[int, int]], Dict[str, bool]]:
-    """
-    Compute interpolation steps for each side.
+def _quat_normalize(q: np.ndarray) -> np.ndarray:
+    n = float(np.linalg.norm(q))
+    if n <= 1e-8:
+        return np.array([0.0, 0.0, 0.0, 1.0], dtype=np.float32)
+    return (q / n).astype(np.float32)
 
-    Returns:
-        steps_by_side: dict[side] -> (pose_steps, gripper_steps)
-        pose_changed: dict[side] -> bool indicating pose change (affects success check)
-    """
-    steps_by_side: Dict[str, tuple[int, int]] = {}
-    pose_changed: Dict[str, bool] = {}
-    # Small-move deadband and short-move single-step thresholds.
-    # Units: xyz in meters, rpy in radians, gripper in raw units.
+
+def _quat_from_rpy(rpy: np.ndarray) -> np.ndarray:
+    roll, pitch, yaw = [float(x) for x in rpy]
+    cr = np.cos(roll * 0.5)
+    sr = np.sin(roll * 0.5)
+    cp = np.cos(pitch * 0.5)
+    sp = np.sin(pitch * 0.5)
+    cy = np.cos(yaw * 0.5)
+    sy = np.sin(yaw * 0.5)
+    qx = sr * cp * cy - cr * sp * sy
+    qy = cr * sp * cy + sr * cp * sy
+    qz = cr * cp * sy - sr * sp * cy
+    qw = cr * cp * cy + sr * sp * sy
+    return _quat_normalize(np.array([qx, qy, qz, qw], dtype=np.float32))
+
+
+def _rpy_from_quat(q: np.ndarray) -> np.ndarray:
+    q = _quat_normalize(q)
+    x, y, z, w = [float(v) for v in q]
+    sinr_cosp = 2.0 * (w * x + y * z)
+    cosr_cosp = 1.0 - 2.0 * (x * x + y * y)
+    roll = np.arctan2(sinr_cosp, cosr_cosp)
+
+    sinp = 2.0 * (w * y - z * x)
+    if abs(sinp) >= 1.0:
+        pitch = np.sign(sinp) * (np.pi / 2.0)
+    else:
+        pitch = np.arcsin(sinp)
+
+    siny_cosp = 2.0 * (w * z + x * y)
+    cosy_cosp = 1.0 - 2.0 * (y * y + z * z)
+    yaw = np.arctan2(siny_cosp, cosy_cosp)
+    return np.array([roll, pitch, yaw], dtype=np.float32)
+
+
+def _quat_slerp(q0: np.ndarray, q1: np.ndarray, t: float) -> np.ndarray:
+    q0 = _quat_normalize(q0)
+    q1 = _quat_normalize(q1)
+    dot = float(np.dot(q0, q1))
+    if dot < 0.0:
+        q1 = -q1
+        dot = -dot
+    dot = float(np.clip(dot, -1.0, 1.0))
+    if dot > 0.9995:
+        return _quat_normalize(q0 + t * (q1 - q0))
+    theta0 = float(np.arccos(dot))
+    sin_theta0 = float(np.sin(theta0))
+    theta = theta0 * t
+    s0 = np.sin(theta0 - theta) / sin_theta0
+    s1 = np.sin(theta) / sin_theta0
+    return _quat_normalize(s0 * q0 + s1 * q1)
+
+
+def _quat_angle(q0: np.ndarray, q1: np.ndarray) -> float:
+    q0 = _quat_normalize(q0)
+    q1 = _quat_normalize(q1)
+    dot = float(np.dot(q0, q1))
+    dot = float(np.clip(abs(dot), -1.0, 1.0))
+    return 2.0 * float(np.arccos(dot))
+
+
+def _trapezoid_params(d: float, v_max: float, a_max: float) -> tuple[float, float, float, float]:
+    if d <= 0.0:
+        return 0.0, 0.0, 0.0, 0.0
+    v_max = max(float(v_max), 1e-6)
+    a_max = max(float(a_max), 1e-6)
+    t_accel = v_max / a_max
+    d_accel = 0.5 * a_max * t_accel * t_accel
+    if d <= 2.0 * d_accel:
+        t_accel = np.sqrt(d / a_max)
+        v_peak = a_max * t_accel
+        total = 2.0 * t_accel
+        return total, t_accel, 0.0, v_peak
+    t_flat = (d - 2.0 * d_accel) / v_max
+    total = 2.0 * t_accel + t_flat
+    return total, t_accel, t_flat, v_max
+
+
+def _trapezoid_position(t: float, d: float, v_max: float, a_max: float) -> float:
+    if d <= 0.0:
+        return 0.0
+    total, t_accel, t_flat, v_peak = _trapezoid_params(d, v_max, a_max)
+    if t <= 0.0:
+        return 0.0
+    if t >= total:
+        return d
+    if t_flat <= 1e-9:
+        # triangular
+        if t <= t_accel:
+            return 0.5 * a_max * t * t
+        t_remain = total - t
+        return d - 0.5 * a_max * t_remain * t_remain
+    d_accel = 0.5 * a_max * t_accel * t_accel
+    if t <= t_accel:
+        return 0.5 * a_max * t * t
+    if t <= t_accel + t_flat:
+        return d_accel + v_peak * (t - t_accel)
+    t_dec = t - t_accel - t_flat
+    return d_accel + v_peak * t_flat + v_peak * t_dec - 0.5 * a_max * t_dec * t_dec
+
+
+def _trapezoid_fraction(t: float, d: float, v_max: float, a_max: float) -> float:
+    if d <= 0.0:
+        return 1.0
+    pos = _trapezoid_position(t, d, v_max, a_max)
+    return float(np.clip(pos / d, 0.0, 1.0))
+
+
+def plan_action_sequences(curr_obs: Dict[str, np.ndarray],
+                          action: Dict[str, np.ndarray],
+                          duration_per_step: float,
+                          limits: Dict[str, Dict[str, Optional[float]]],
+                          min_steps: int,
+                          ) -> Dict[str, list[np.ndarray]]:
+    """Plan sequences for both arms with constrained mode."""
+    v_xyz = limits["xyz"]["v"]
+    a_xyz = limits["xyz"]["a"]
+    v_rpy = limits["rpy"]["v"]
+    a_rpy = limits["rpy"]["a"]
+
+    if v_xyz is None or a_xyz is None or v_rpy is None or a_rpy is None:
+        raise ValueError("Missing xyz/rpy limits for constrained planning.")
+
+    dt = float(duration_per_step) if duration_per_step > 0 else 0.02
     eps_xyz = 5e-4
     eps_rpy = 5e-4
     eps_grip = 5e-4
-    short_xyz = max_v_xyz * duration_per_step
-    short_rpy = max_v_rpy * duration_per_step
-    for side in ("left", "right"):
-        target = action.get(side)
-        curr_end = curr_obs.get(f"{side}_end_pos")
-        curr_joint = curr_obs.get(f"{side}_joint_pos")
-        if target is None or curr_end is None or curr_joint is None:
-            continue
-        start = np.concatenate([np.array(curr_end, dtype=np.float32),
-                                [float(curr_joint[6])]])
-        target_arr = target if isinstance(
-            target, np.ndarray) else np.array(target, dtype=np.float32)
-        diff = np.abs(target_arr - start)
-        diff_xyz = float(diff[:3].max())
-        diff_rpy = float(diff[3:6].max())
-        if diff_xyz < eps_xyz and diff_rpy < eps_rpy:
-            pose_steps = 0
-            pose_changed[side] = False
-        else:
-            need_steps = [
-                int(np.ceil(diff_xyz / (max_v_xyz * duration_per_step))),
-                int(np.ceil(diff_rpy / (max_v_rpy * duration_per_step))),
-            ]
-            pose_steps = max(min_steps_per_action, max(need_steps))
-            pose_changed[side] = True
-
-        grip_steps = 0
-        delta_g = diff[6]
-        if delta_g > 0:
-            if delta_g <= eps_grip:
-                grip_steps = 0
-            elif delta_g <= 1e-3:
-                grip_steps = 1
-            else:
-                grip_steps = max(min_steps_gripper, max(1, pose_steps // 3))
-
-        steps_by_side[side] = (pose_steps, grip_steps)
-    return steps_by_side, pose_changed
-
-
-def interpolate_action(curr_obs: Dict[str, np.ndarray], action: Dict[str, np.ndarray],
-                       steps: Dict[str, tuple[int, int]]) -> Dict[str, list[np.ndarray]]:
-    """Interpolate end-effector+gripper sequences for both arms.
-
-    steps: per side (pose_steps, gripper_steps); length is per-side max; beyond length hold last value.
-    """
+    grip_finish_ratio = 0.5
+    min_steps_i = max(int(min_steps), 0)
+    min_steps_grip = min_steps_i // 2
+    if min_steps_i > 0 and min_steps_grip == 0:
+        min_steps_grip = 1
     results: Dict[str, list[np.ndarray]] = {}
-
-    def smoothstep5(n: int) -> np.ndarray:
-        """Quintic smoothstep 6t^5-15t^4+10t^3 for smooth start/stop."""
-        if n <= 1:
-            return np.array([1.0], dtype=np.float32)
-        t = np.linspace(0.0, 1.0, n)
-        return t**3 * (10 - 15 * t + 6 * t * t)
 
     for side in ("left", "right"):
         target = action.get(side)
@@ -394,23 +458,66 @@ def interpolate_action(curr_obs: Dict[str, np.ndarray], action: Dict[str, np.nda
         curr_gripper = float(curr_joint[6])
         start_pose = np.array(curr_end, dtype=np.float32)
         start_grip = curr_gripper
+        delta_xyz = target[:3] - start_pose[:3]
+        d_xyz = float(np.max(np.abs(delta_xyz)))
 
-        pose_steps, grip_steps = steps.get(side, (0, 0))
+        q0 = _quat_from_rpy(start_pose[3:6])
+        q1 = _quat_from_rpy(target[3:6])
+        d_rpy = float(_quat_angle(q0, q1))
+
+        delta_g = float(target[6]) - start_grip
+        d_g = abs(delta_g)
+
+        t_xyz = _trapezoid_params(d_xyz, v_xyz, a_xyz)[
+            0] if d_xyz > eps_xyz else 0.0
+        t_rpy = _trapezoid_params(d_rpy, v_rpy, a_rpy)[
+            0] if d_rpy > eps_rpy else 0.0
+        steps_xyz = int(np.ceil(t_xyz / dt)) if t_xyz > 0 else 0
+        steps_rpy = int(np.ceil(t_rpy / dt)) if t_rpy > 0 else 0
+        pose_steps = max(steps_xyz, steps_rpy)
+        if pose_steps > 0 and min_steps_i > 0:
+            pose_steps = max(pose_steps, min_steps_i)
+
+        if d_g > eps_grip:
+            if pose_steps > 0:
+                grip_steps = max(
+                    1, int(np.ceil(pose_steps * grip_finish_ratio)))
+            else:
+                grip_steps = max(
+                    1, min_steps_grip) if min_steps_grip > 0 else 1
+        else:
+            grip_steps = 0
+
         max_steps = max(pose_steps, grip_steps)
         if max_steps <= 0:
             continue
 
-        pose_alphas = smoothstep5(pose_steps)
-        grip_alphas = smoothstep5(grip_steps)
         seq: list[np.ndarray] = []
         for i in range(max_steps):
-            pose_alpha = pose_alphas[min(
-                i, pose_steps - 1)] if pose_steps > 0 else 1.0
-            grip_alpha = grip_alphas[min(
-                i, grip_steps - 1)] if grip_steps > 0 else 1.0
-            pose_interp = start_pose + (target[:6] - start_pose) * pose_alpha
-            grip_interp = start_grip + \
-                (float(target[6]) - start_grip) * grip_alpha
-            seq.append(np.concatenate([pose_interp, [grip_interp]]))
+            t = (i + 1) * dt
+            if d_xyz > eps_xyz:
+                s_xyz = _trapezoid_fraction(t, d_xyz, v_xyz, a_xyz)
+            else:
+                s_xyz = 1.0
+            if d_rpy > eps_rpy:
+                s_rpy = _trapezoid_fraction(t, d_rpy, v_rpy, a_rpy)
+            else:
+                s_rpy = 1.0
+
+            pos_xyz = start_pose[:3] + delta_xyz * s_xyz
+            if d_rpy > eps_rpy:
+                q = _quat_slerp(q0, q1, s_rpy)
+                pos_rpy = _rpy_from_quat(q)
+            else:
+                pos_rpy = start_pose[3:6]
+
+            if grip_steps > 0:
+                s_grip = min((i + 1) / grip_steps, 1.0)
+            else:
+                s_grip = 1.0
+
+            grip_val = start_grip + delta_g * s_grip
+            seq.append(np.concatenate([pos_xyz, pos_rpy, [grip_val]]))
         results[side] = seq
+
     return results

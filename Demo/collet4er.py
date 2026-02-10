@@ -115,6 +115,9 @@ def main() -> None:
     args.out_dir.mkdir(parents=True, exist_ok=True)
 
     env = ARXRobotEnv(
+        min_steps=20,
+        max_v_xyz=0.25, max_a_xyz=0.20,
+        max_v_rpy=0.3, max_a_rpy=1.00,
         camera_type="color",
         camera_view=(args.camera,),
         img_size=(args.img_w, args.img_h),

@@ -198,17 +198,16 @@ def single_arm_pick_place(
 def main():
     arx = ARXRobotEnv(
         duration_per_step=1.0 / 20.0,
-        min_steps_per_action=60,
-        min_steps_gripper=20,
-        max_v_xyz=0.15,
-        max_v_rpy=0.3,
+        min_steps=20,
+        max_v_xyz=0.15, max_a_xyz=0.20,
+        max_v_rpy=0.45, max_a_rpy=1.00,
         camera_type="all",
         camera_view=("camera_h",),
         img_size=(640, 480),
     )
     pick_prompt = "the target cup"
     place_prompt = "the target coaster"
-    single_arm_pick_place(arx, pick_prompt, place_prompt)
+    single_arm_pick_place(arx, pick_prompt, place_prompt, debug=True)
 
 
 if __name__ == "__main__":

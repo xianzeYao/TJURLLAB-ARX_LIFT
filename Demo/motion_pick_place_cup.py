@@ -2,7 +2,7 @@ import numpy as np
 from typing import Dict, Optional
 
 CLOSE = 0.0
-OPEN = -2.9
+OPEN = -3.2
 GRIPPER_OFFSET = 0.15
 GRIPPER_CUP = -2.2
 # GRIPPER_CUP = -1.9 # for pick
