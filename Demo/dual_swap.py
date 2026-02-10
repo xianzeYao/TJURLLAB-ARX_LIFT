@@ -28,8 +28,8 @@ def main():
     try:
         arx = ARXRobotEnv(duration_per_step=1.0/20.0,  # 就是插值里一步的时间，20Hz也就是0.05s
                           min_steps=20,
-                          max_v_xyz=0.25, max_a_xyz=0.20,
-                          max_v_rpy=0.3, max_a_rpy=1.00,
+                          max_v_xyz=0.15, max_a_xyz=0.20,
+                          max_v_rpy=0.45, max_a_rpy=1.00,
                           camera_type="all",
                           camera_view=("camera_h",),
                           img_size=(640, 480))
@@ -40,13 +40,18 @@ def main():
             "right": np.array([0, 0, 0, 0, 0, 0, -3.4], dtype=np.float32),
         }
         arx.step(open_action)
-        print("请放取扫把簸箕，6秒后开始夹取...")
-        time.sleep(6.0)
+        print("请放取扫把簸箕，5秒后开始夹取...")
+        time.sleep(5.0)
         close_action = {
-            "left":  np.array([0, 0, 0.1, 0, 0, 0, 0.0], dtype=np.float32,),
-            "right": np.array([0, 0, 0.1, 0, 0, 0, 0.0], dtype=np.float32),
+            "left":  np.array([0, 0, 0, 0, 0, 0, 0.0], dtype=np.float32,),
+            "right": np.array([0, 0, 0, 0, 0, 0, 0.0], dtype=np.float32),
         }
         arx.step(close_action)
+        time.sleep(5.0)
+        lift_action = {"left": np.array([0, 0, 0.1, 0, 0, 0, 0.0], dtype=np.float32,),
+                       "right": np.array([0, 0, 0.1, 0, 0, 0, 0.0], dtype=np.float32),
+                       }
+        arx.step(lift_action)
         time.sleep(1.0)
         # arx.step_base(vx=-0.5, vy=0.0, vz=0.5, duration=9.0)
         # arx.step_base(vx=0.75, vy=0.0, vz=0.0, duration=2.0)

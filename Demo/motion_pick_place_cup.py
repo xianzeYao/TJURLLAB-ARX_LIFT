@@ -2,9 +2,9 @@ import numpy as np
 from typing import Dict, Optional
 
 CLOSE = 0.0
-OPEN = -3.2
+OPEN = -3.0
 GRIPPER_OFFSET = 0.15
-GRIPPER_CUP = -2.2
+GRIPPER_CUP = -2.05
 # GRIPPER_CUP = -1.9 # for pick
 Z_CUP = 0.045
 
@@ -63,7 +63,7 @@ def make_pick_back_action(pt_ref: Optional[np.ndarray], arm: str) -> Dict[str, n
     """夹住回到初始位置，保持不动。"""
     base = np.zeros(3, dtype=np.float32) if pt_ref is None else pt_ref
     active = np.array(
-        [(base[0] - GRIPPER_OFFSET)/6, 0, (base[2] + Z_CUP)/2, 0, 0, 0, GRIPPER_CUP],
+        [(base[0] - GRIPPER_OFFSET)/4, 0, (base[2] + Z_CUP)/2, 0, 0, 0, GRIPPER_CUP],
         dtype=np.float32,
     )
     return _make_arm_action(arm, active)
@@ -74,7 +74,7 @@ def make_place_move_action(pt_ref: Optional[np.ndarray], arm: str) -> Dict[str, 
     base = np.zeros(3, dtype=np.float32) if pt_ref is None else pt_ref
     active = np.array(
         [base[0] - GRIPPER_OFFSET-0.04, base[1],
-         base[2] + Z_CUP+0.06, 0, 0, 0, GRIPPER_CUP],
+         base[2] + Z_CUP+0.08, 0, 0, 0, GRIPPER_CUP],
         dtype=np.float32,
     )
     return _make_arm_action(arm, active)
@@ -85,7 +85,7 @@ def make_place_robust_action(pt_ref: Optional[np.ndarray], arm: str) -> Dict[str
     base = np.zeros(3, dtype=np.float32) if pt_ref is None else pt_ref
     active = np.array(
         [base[0] - GRIPPER_OFFSET, base[1],
-         base[2] + Z_CUP+0.06, 0, 0, 0, GRIPPER_CUP],
+         base[2] + Z_CUP+0.08, 0, 0, 0, GRIPPER_CUP],
         dtype=np.float32,
     )
     return _make_arm_action(arm, active)

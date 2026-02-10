@@ -272,9 +272,9 @@ def dual_arm_pick_planning(
             )
 
             if pick_px is not None:
-                cv2.circle(color, pick_px, 5, (0, 0, 255), -1)
+                cv2.circle(color, pick_px, 3,  (0, 0, 255), -1)
             if place_px is not None:
-                cv2.circle(color, place_px, 5, (255, 0, 0), -1)
+                cv2.circle(color, place_px, 3,  (255, 0, 0), -1)
 
             prompt_lines = textwrap.wrap(display_prompt, width=60)
             if skip_place:

@@ -59,7 +59,7 @@ def hello(arx: ARXRobotEnv, side="left", close_robot=True, wave_cycles: int = 1)
         arx.step_lift(16.0)
         # JOINT控制抬升
         give_joint_action(arx=arx, side=side, joint_key=[1, 2, 3],
-                          target_pos=[0.7, 1.0, 1.3], num=60, sleep_s=arx.duration_per_step)
+                          target_pos=[0.7, 0.65, 1.3], num=60, sleep_s=arx.duration_per_step)
         time.sleep(0.5)
         # 单纯手腕控制用joint进行控制
         give_joint_action(
@@ -95,7 +95,7 @@ def main():
                       camera_view=("camera_h",),
                       img_size=(640, 480))
     arx.reset()
-    hello(arx, side="right", close_robot=True, wave_cycles=2)
+    hello(arx, side="left", close_robot=True, wave_cycles=2)
 
 
 if __name__ == "__main__":

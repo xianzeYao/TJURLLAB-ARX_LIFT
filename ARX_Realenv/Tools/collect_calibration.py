@@ -63,8 +63,8 @@ def save_sample(
         return False
     color_key, img = color_candidates[0]
     # 强制保存为 RGB：输入通常来自 cv2/ROS，默认 BGR，这里转换成 RGB 再写盘
-    if img.ndim == 3 and img.shape[2] == 3:
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    # if img.ndim == 3 and img.shape[2] == 3:
+    #     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     img_path = sample_dir / "camera.png"
     cv2.imwrite(str(img_path), img)
     meta["color_key"] = color_key

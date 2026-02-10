@@ -192,12 +192,12 @@ def place_planning(arx: ARXRobotEnv, reset_robot: bool = True, close_robot: bool
             # 可视化
             disp = color.copy()
             if current_pick_uv:
-                cv2.circle(disp, current_pick_uv, 5, (0, 0, 255), -1)
+                cv2.circle(disp, current_pick_uv, 3,  (0, 0, 255), -1)
             if predicted_place_uv and i % 2 == 1:
-                cv2.circle(disp, predicted_place_uv, 5, (0, 0, 255), -1)
+                cv2.circle(disp, predicted_place_uv, 3,  (0, 0, 255), -1)
             if attachment_uvs:
                 for uv in attachment_uvs:
-                    cv2.circle(disp, uv, 5, (255, 0, 0), -1)
+                    cv2.circle(disp, uv, 3,  (255, 0, 0), -1)
 
             curr_prompt = pick_prompt if i % 2 == 0 else current_place_prompt
             prompt_lines = textwrap.wrap(f"prompt: {curr_prompt}", width=32)

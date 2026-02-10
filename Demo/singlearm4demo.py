@@ -124,7 +124,7 @@ def main():
                 continue
             disp = color.copy()
             if clicked is not None:
-                cv2.circle(disp, clicked, 5, (0, 0, 255), -1)
+                cv2.circle(disp, clicked, 3,  (0, 0, 255), -1)
             cv2.imshow(win, disp)
             key = cv2.waitKey(1) & 0xFF
             if key in (27, ord("q")):  # ESC or q to quit
@@ -257,10 +257,10 @@ def main():
 
                 disp = color.copy()
                 if predicted_px is not None:
-                    cv2.circle(disp, predicted_px, 5, (0, 0, 255), -1)
+                    cv2.circle(disp, predicted_px, 3,  (0, 0, 255), -1)
                 if attachment_uvs:
                     for uv in attachment_uvs:
-                        cv2.circle(disp, uv, 5, (255, 0, 0), -1)
+                        cv2.circle(disp, uv, 3,  (255, 0, 0), -1)
                 curr_prompt = pick_prompt if i % 2 == 0 else place_prompt
                 prompt_lines = textwrap.wrap(
                     f"prompt: {curr_prompt}", width=32)

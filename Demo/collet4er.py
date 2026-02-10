@@ -46,10 +46,57 @@ def find_color_frame(obs: dict, prefer_cam: str = "camera_h") -> tuple[Optional[
     return candidates[0]
 
 
+def find_depth_frame(obs: dict, prefer_cam: str = "camera_h") -> tuple[Optional[str], Optional[np.ndarray]]:
+    candidates = [(k, v) for k, v in obs.items()
+                  if isinstance(v, np.ndarray) and "depth" in k]
+    if not candidates:
+        return None, None
+
+    for key, img in candidates:
+        if prefer_cam in key:
+            return key, img
+    return candidates[0]
+
+
+def _depth_to_meters(depth: np.ndarray, unit: str) -> np.ndarray:
+    depth_f = depth.astype(np.float32)
+    if unit == "mm":
+        return depth_f * 0.001
+    if unit == "m":
+        return depth_f
+    valid = np.isfinite(depth_f) & (depth_f > 0)
+    if np.any(valid):
+        if float(np.percentile(depth_f[valid], 50)) > 20.0:
+            return depth_f * 0.001
+    return depth_f
+
+
+def depth_to_colormap(depth: np.ndarray, vmin: float, vmax: float, unit: str) -> tuple[np.ndarray | None, dict]:
+    depth_m = _depth_to_meters(depth, unit)
+    valid = np.isfinite(depth_m) & (depth_m > 0)
+    if not np.any(valid):
+        return None, {}
+    vals = depth_m[valid]
+    if vmax <= vmin:
+        vmax = vmin + 1e-6
+    norm = (depth_m - vmin) / (vmax - vmin)
+    norm = np.clip(norm, 0.0, 1.0)
+    img8 = (norm * 255.0).astype(np.uint8)
+    color = cv2.applyColorMap(img8, cv2.COLORMAP_JET)
+    color[~valid] = 0
+    stats = {
+        "min": float(np.min(vals)),
+        "med": float(np.median(vals)),
+        "max": float(np.max(vals)),
+        "above_max": float(np.mean(vals > vmax)),
+    }
+    return color, stats
+
+
 def draw_points(image: np.ndarray, points: list[tuple[int, int]]) -> np.ndarray:
     canvas = image.copy()
     for idx, (x, y) in enumerate(points, start=1):
-        cv2.circle(canvas, (x, y), 5, (0, 0, 255), -1)
+        cv2.circle(canvas, (x, y), 3, (0, 0, 255), -1)
         label = str(idx)
         (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
         cv2.putText(
@@ -110,6 +157,12 @@ def main() -> None:
     parser.add_argument("--height-min", type=float, default=0.0)
     parser.add_argument("--height-max", type=float, default=20.0)
     parser.add_argument("--skip-home", action="store_true", help="不执行 reset()")
+    parser.add_argument("--depth-min", type=float,
+                        default=0.2, help="深度可视化最小值(米)")
+    parser.add_argument("--depth-max", type=float,
+                        default=2.5, help="深度可视化最大值(米)")
+    parser.add_argument("--depth-unit", choices=["auto", "m", "mm"], default="auto",
+                        help="深度单位(默认自动判断)")
     args = parser.parse_args()
 
     args.out_dir.mkdir(parents=True, exist_ok=True)
@@ -118,7 +171,7 @@ def main() -> None:
         min_steps=20,
         max_v_xyz=0.25, max_a_xyz=0.20,
         max_v_rpy=0.3, max_a_rpy=1.00,
-        camera_type="color",
+        camera_type="all",
         camera_view=(args.camera,),
         img_size=(args.img_w, args.img_h),
     )
@@ -133,6 +186,7 @@ def main() -> None:
         obs0.get("base_height", np.array([0.0], dtype=np.float32))[0])
 
     win = "collet4er"
+    win_depth = "collet4er_depth"
     points: list[tuple[int, int]] = []
 
     def on_mouse(event, x, y, flags, param):
@@ -141,6 +195,7 @@ def main() -> None:
             points.append((int(x), int(y)))
 
     cv2.namedWindow(win, cv2.WINDOW_NORMAL)
+    cv2.namedWindow(win_depth, cv2.WINDOW_NORMAL)
     cv2.setMouseCallback(win, on_mouse)
 
     print("操作说明: w上升, s下降, y保存, r清空点, q/ESC退出")
@@ -153,6 +208,7 @@ def main() -> None:
             if frame is None or cam_key is None:
                 cv2.waitKey(1)
                 continue
+            _, depth = find_depth_frame(obs, prefer_cam=args.camera)
 
             raw_img = frame.copy()
             marked = draw_points(raw_img, points)
@@ -161,6 +217,19 @@ def main() -> None:
             cv2.putText(marked, tip, (12, 28), cv2.FONT_HERSHEY_SIMPLEX,
                         0.7, (0, 0, 255), 2, cv2.LINE_AA)
             cv2.imshow(win, marked)
+            if depth is not None:
+                depth_vis, stats = depth_to_colormap(
+                    depth, args.depth_min, args.depth_max, args.depth_unit)
+                if depth_vis is not None:
+                    if stats:
+                        info = f"z(m) min={stats['min']:.2f} med={stats['med']:.2f} max={stats['max']:.2f}"
+                        cv2.putText(depth_vis, info, (12, 24), cv2.FONT_HERSHEY_SIMPLEX,
+                                    0.6, (255, 255, 255), 1, cv2.LINE_AA)
+                        if stats["above_max"] > 0.5:
+                            warn = f">50% > max ({args.depth_max:.2f}m). Increase --depth-max."
+                            cv2.putText(depth_vis, warn, (12, 48), cv2.FONT_HERSHEY_SIMPLEX,
+                                        0.6, (255, 255, 255), 1, cv2.LINE_AA)
+                    cv2.imshow(win_depth, depth_vis)
 
             key = cv2.waitKey(1) & 0xFF
             if key in (27, ord("q")):

@@ -20,9 +20,9 @@ sys.path.append("../ARX_Realenv/ROS2")  # noqa
 from arx_ros2_env import ARXRobotEnv  # noqa
 
 COASTER_PROMPTS = [
-    "the coaster (the left one near cups most)",
-    "the coaster (the right one near cups most)",
-    "the coaster (the leftmost one)",
+    "the center of coaster (the left one near cups most)",
+    "the center of coaster (the right one near cups most)",
+    "the center of coaster (the leftmost one)",
     "the coaster (the rightmost one)",
 ]
 
@@ -184,6 +184,14 @@ def dual_arm_pick_planning_parallel(
             if color is None or depth is None:
                 cv2.waitKey(1)
                 continue
+            depths = [depth]
+            for _ in range(9):
+                frames = arx.node.get_camera(
+                    target_size=(640, 480), return_status=False)
+                d = frames.get("camera_h_aligned_depth_to_color")
+                if d is not None:
+                    depths.append(d)
+            depth = np.median(np.stack(depths, axis=0), axis=0)
 
             target_steps = plan_steps
             if plan_cups:
@@ -263,12 +271,12 @@ def dual_arm_pick_planning_parallel(
 
             disp = color.copy()
             for i, p in enumerate(pick_px):
-                cv2.circle(disp, p, 5, (0, 0, 255), -1)
+                cv2.circle(disp, p, 3,  (0, 0, 255), -1)
                 draw_text_lines(disp, [f"P{i+1}"], origin=(p[0] + 6, p[1] - 6))
             for i, p in enumerate(place_px):
                 if p is None:
                     continue
-                cv2.circle(disp, p, 5, (255, 0, 0), -1)
+                cv2.circle(disp, p, 3,  (255, 0, 0), -1)
                 draw_text_lines(disp, [f"C{i+1}"], origin=(p[0] + 6, p[1] - 6))
 
             info_lines = [

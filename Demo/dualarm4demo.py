@@ -102,9 +102,9 @@ def main():
             disp = color.copy()
             arm_state = state[arm]
             if arm_state["pick_px"] is not None:
-                cv2.circle(disp, arm_state["pick_px"], 5, (0, 0, 255), -1)
+                cv2.circle(disp, arm_state["pick_px"], 3,  (0, 0, 255), -1)
             if arm_state["place_px"] is not None:
-                cv2.circle(disp, arm_state["place_px"], 5, (255, 0, 0), -1)
+                cv2.circle(disp, arm_state["place_px"], 3,  (255, 0, 0), -1)
             cv2.putText(
                 disp,
                 views[arm]["title"],
@@ -230,8 +230,8 @@ def main():
                 disp_left = color.copy()
                 disp_right = color.copy()
                 if predicted_px is not None:
-                    cv2.circle(disp_left, predicted_px, 5, (0, 0, 255), -1)
-                    cv2.circle(disp_right, predicted_px, 5, (255, 0, 0), -1)
+                    cv2.circle(disp_left, predicted_px, 3,  (0, 0, 255), -1)
+                    cv2.circle(disp_right, predicted_px, 3,  (255, 0, 0), -1)
                 cv2.imshow(win_left, disp_left)
                 cv2.imshow(win_right, disp_right)
 

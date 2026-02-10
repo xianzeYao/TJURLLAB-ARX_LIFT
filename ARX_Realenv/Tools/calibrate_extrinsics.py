@@ -149,7 +149,7 @@ def draw_axes_bgr(
         uvw = K @ (p[:3] / p[2])
         pt = (int(uvw[0]), int(uvw[1]))
         cv2.arrowedLine(img, origin_px, pt, color, thickness, tipLength=0.25)
-        cv2.circle(img, pt, 4, color, -1)  # endpoint dot to确保颜色可见
+        cv2.circle(img, pt, 3,  color, -1)  # endpoint dot to确保颜色可见
     if skipped and warn_prefix:
         # 仅打印一次该样本的缺失轴颜色
         color_map = {(0, 0, 255): "X(red)", (0, 255, 0)                     : "Y(green)", (255, 0, 0): "Z(blue)"}
@@ -203,7 +203,7 @@ def project_ref_point_to_image(
         )
         u += pad_left
         v += pad_top
-    cv2.circle(img, (u, v), 10, (255, 0, 255), -1)  # ref 点标粉色
+    cv2.circle(img, (u, v), 3, (255, 0, 255), -1)  # ref 点标粉色
     return img, (u, v), padded
 
 

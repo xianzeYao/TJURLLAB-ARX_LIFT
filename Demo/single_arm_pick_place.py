@@ -62,7 +62,7 @@ def _predict_two_points(
     return pick, place
 
 
-def _get_frame(arx: ARXRobotEnv) -> Tuple[np.ndarray, np.ndarray]:
+def _get_frame(arx: ARXRobotEnv, depth_median_n: int = 10) -> Tuple[np.ndarray, np.ndarray]:
     while True:
         frames = arx.node.get_camera(
             target_size=(640, 480), return_status=False)
@@ -71,7 +71,17 @@ def _get_frame(arx: ARXRobotEnv) -> Tuple[np.ndarray, np.ndarray]:
         if color is None or depth is None:
             cv2.waitKey(1)
             continue
-        return color, depth
+        if depth_median_n <= 1:
+            return color, depth
+        depths = [depth]
+        for _ in range(depth_median_n - 1):
+            frames = arx.node.get_camera(
+                target_size=(640, 480), return_status=False)
+            d = frames.get("camera_h_aligned_depth_to_color")
+            if d is not None:
+                depths.append(d)
+        depth_med = np.median(np.stack(depths, axis=0), axis=0)
+        return color, depth_med
 
 
 def single_arm_pick_place(
@@ -84,6 +94,7 @@ def single_arm_pick_place(
     close_robot: bool = True,
     debug: bool = True,
     go_home: bool = True,
+    depth_median_n: int = 10,
 ) -> Tuple[Optional[np.ndarray], Optional[np.ndarray]]:
     try:
         if reset_robot:
@@ -98,7 +109,7 @@ def single_arm_pick_place(
             if not do_pick and not do_place:
                 raise ValueError("pick_prompt 和 place_prompt 不能同时为空")
             time.sleep(1.5)
-            color, depth = _get_frame(arx)
+            color, depth = _get_frame(arx, depth_median_n=depth_median_n)
             pick_px = None
             place_px = None
             if do_pick and do_place:
@@ -137,10 +148,10 @@ def single_arm_pick_place(
             vis = color.copy()
             lines = []
             if pick_px is not None:
-                cv2.circle(vis, pick_px, 5, (0, 0, 255), -1)
+                cv2.circle(vis, pick_px, 3,  (0, 0, 255), -1)
                 lines.append(f"Pick: {pick_prompt}")
             if place_px is not None:
-                cv2.circle(vis, place_px, 5, (255, 0, 0), -1)
+                cv2.circle(vis, place_px, 3,  (255, 0, 0), -1)
                 lines.append(f"Place: {place_prompt}")
             if lines:
                 draw_text_lines(
@@ -205,9 +216,21 @@ def main():
         camera_view=("camera_h",),
         img_size=(640, 480),
     )
-    pick_prompt = "the target cup"
-    place_prompt = "the target coaster"
-    single_arm_pick_place(arx, pick_prompt, place_prompt, debug=True)
+    arx.reset()
+    arx.step_lift(18.0)
+    # right_open_action = {"right": np.array(
+    #     [0, 0, 0, 0, 0, 0, -3.4], dtype=np.float32)}
+    # arx.step(right_open_action)
+    # time.sleep(5.0)
+    # right_close_action = {"right": np.array(
+    #     [0, 0, 0, 0, 0, 0, -2.05], dtype=np.float32)}
+    # arx.step(right_close_action)
+    # place_prompt = "the center part of the brown coaster on the right side"
+    # single_arm_pick_place(arx, reset_robot=False, pick_prompt="", place_prompt=place_prompt, arm="right",
+    #                       debug=True, depth_median_n=10)
+    pick_prompt = "the cup on the left brown coaster"
+    single_arm_pick_place(arx, reset_robot=False, pick_prompt=pick_prompt, place_prompt="",
+                          debug=True, depth_median_n=10)
 
 
 if __name__ == "__main__":
