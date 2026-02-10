@@ -32,15 +32,15 @@ sys.path.append("../ARX_Realenv/ROS2")  # noqa
 from arx_ros2_env import ARXRobotEnv  # noqa
 
 PLACE_PROMPT_COASTER1 = (
-    "The exact center of the leftmost coaster that has no cup on it. "
+    "the leftmost coaster. "
     "Return only JSON: [{\"point_2d\": [x, y]}]."
 )
 PLACE_PROMPT_COASTER2 = (
-    "The exact center of the rightmost coaster that has no cup on it. "
+    "the rightmost coaster. "
     "Return only JSON: [{\"point_2d\": [x, y]}]."
 )
 PLACE_PROMPT_COASTER3 = (
-    "The exact center of the middle coaster that has no cup on it. "
+    "the middle coaster. "
     "Return only JSON: [{\"point_2d\": [x, y]}]."
 )
 PLACE_PROMPTS_COASTER = (
@@ -48,12 +48,6 @@ PLACE_PROMPTS_COASTER = (
     PLACE_PROMPT_COASTER2,
     PLACE_PROMPT_COASTER3,
 )
-
-LLM_TEMPERATURE = 0.0
-LLM_TOP_P = 1.0
-LLM_SEED = 3407
-LLM_MAX_TOKENS = 256
-PLACE_V_BIAS_PX = 0.0
 
 
 def _arm_for_cycle(cycle_idx: int) -> str:
@@ -64,7 +58,7 @@ def _place_height(place_idx: int) -> float:
     if place_idx < 3:
         return 13.5
     if place_idx < 5:
-        return 17.0
+        return 17.5
     return 20.0
 
 
@@ -111,10 +105,6 @@ def describe_cup(color: np.ndarray, arm: str) -> str:
         all_prompt=prompt,
         assume_bgr=False,
         return_raw=True,
-        temperature=LLM_TEMPERATURE,
-        top_p=LLM_TOP_P,
-        seed=LLM_SEED,
-        max_tokens=LLM_MAX_TOKENS,
     )
     return _clean_desc(raw_text)
 
@@ -125,10 +115,6 @@ def predict_pick_point(color: np.ndarray, desc: str) -> Tuple[int, int]:
         color,
         text_prompt=pick_prompt,
         assume_bgr=False,
-        temperature=LLM_TEMPERATURE,
-        top_p=LLM_TOP_P,
-        seed=LLM_SEED,
-        max_tokens=LLM_MAX_TOKENS,
     )
     return int(round(u)), int(round(v))
 
@@ -139,10 +125,6 @@ def predict_place_coaster(color: np.ndarray, idx: int) -> Tuple[int, int]:
         color,
         text_prompt=prompt,
         assume_bgr=False,
-        temperature=LLM_TEMPERATURE,
-        top_p=LLM_TOP_P,
-        seed=LLM_SEED,
-        max_tokens=LLM_MAX_TOKENS,
     )
     return int(round(u)), int(round(v))
 
@@ -156,23 +138,18 @@ def predict_place_from_queue(
     T_cam2ref: np.ndarray,
 ) -> Tuple[Optional[Tuple[int, int]], Optional[np.ndarray], Optional[List[Tuple[int, int]]], str]:
     prompt = (
-        f"Point to exactly top center of the {cup1}.\n"
-        f"Point to exactly top center of the {cup2}.\n"
+        f"Point to top center of the {cup1}.\n"
+        f"Point to top center of the {cup2}.\n"
         "Output the pixel coordinates of the two points."
     )
-    raw_uvs, raw_text = predict_multi_points_from_rgb(
+    raw_uvs = predict_multi_points_from_rgb(
         color,
         text_prompt="",
         all_prompt=prompt,
         assume_bgr=False,
-        return_raw=True,
-        temperature=LLM_TEMPERATURE,
-        top_p=LLM_TOP_P,
-        seed=LLM_SEED,
-        max_tokens=LLM_MAX_TOKENS,
     )
     raw_uvs = raw_uvs[:2]
-    uv_ints = [(int(round(u)), int(round(v + PLACE_V_BIAS_PX)))
+    uv_ints = [(int(round(u)), int(round(v+2)))
                for (u, v) in raw_uvs]
     valid_uvs, valid_refs = filter_valid_points(uv_ints, depth, K, T_cam2ref)
     if len(valid_uvs) < 2:
@@ -220,15 +197,36 @@ def dual_cup_place_planning(
     place_color: Optional[np.ndarray] = None
     use_queue_place = False
 
+    def reset_pick_state(clear_prompt: bool) -> None:
+        nonlocal current_desc, pick_prompt, current_pick_uv, current_pick_ref, pick_color
+        current_desc = None
+        if clear_prompt:
+            pick_prompt = None
+        current_pick_uv = None
+        current_pick_ref = None
+        pick_color = None
+
+    def reset_place_state() -> None:
+        nonlocal predicted_place_uv, place_ref, attachment_uvs, place_prompt, place_color, use_queue_place
+        predicted_place_uv = None
+        place_ref = None
+        attachment_uvs = None
+        place_prompt = None
+        place_color = None
+        use_queue_place = False
+
     try:
         while cycle_idx < total_cycles:
             arm = _arm_for_cycle(cycle_idx)
             T_cam2ref = T_left if arm == "left" else T_right
             combined_stage = _is_combined_stage(cycle_idx)
+            mode = "combined" if combined_stage else stage
+            need_pick = mode in ("combined", "pick")
+            need_place = mode in ("combined", "place")
             display_color = None
 
             # 预测 pick
-            if stage == "pick" or combined_stage:
+            if need_pick:
                 if current_pick_ref is None:
                     arx.step_lift(13.5)
                     pick_color, pick_depth = _get_frames(arx)
@@ -251,14 +249,13 @@ def dual_cup_place_planning(
                     current_pick_ref = pixel_to_ref_point(
                         current_pick_uv, pick_depth, K, T_cam2ref
                     )
-                    current_pick_ref[0] += 0.01
                     print(
                         f"pick 预测像素 {current_pick_uv} -> ref {current_pick_ref.tolist()}，按 e 执行"
                     )
                 display_color = pick_color
 
             # 预测 place
-            if stage == "place" or combined_stage:
+            if need_place:
                 if place_ref is None:
                     place_idx = cycle_idx
                     place_height = _place_height(place_idx)
@@ -288,7 +285,6 @@ def dual_cup_place_planning(
                         place_ref = pixel_to_ref_point(
                             predicted_place_uv, place_depth, K, T_cam2ref
                         )
-                        place_ref[0] += 0.01
                         use_queue_place = False
                     else:
                         use_queue_place = True
@@ -320,7 +316,11 @@ def dual_cup_place_planning(
                             T_cam2ref,
                         )
                         if place_ref is not None:
-                            place_ref[0] += 0.01
+                            if cycle_idx == 4:
+                                place_ref[1] -= 0.015
+                            if cycle_idx == 5:
+                                place_ref[1] += 0.015
+                            place_ref[0] -= 0.01
                         if place_ref is None:
                             continue
 
@@ -364,33 +364,21 @@ def dual_cup_place_planning(
             key = cv2.waitKey(1) & 0xFF
 
             if key == ord("r"):
-                if combined_stage or stage == "pick":
-                    current_desc = None
-                    pick_prompt = None
-                    current_pick_uv = None
-                    current_pick_ref = None
-                    pick_color = None
-                if combined_stage or stage == "place":
-                    predicted_place_uv = None
-                    place_ref = None
-                    attachment_uvs = None
-                    place_prompt = None
-                    place_color = None
-                    use_queue_place = False
+                if need_pick:
+                    reset_pick_state(clear_prompt=True)
+                if need_place:
+                    reset_place_state()
                 continue
 
             if key == ord("e"):
                 # 前三次合并执行；之后拆成 pick->place 两段
-                if combined_stage:
+                print(cycle_idx)
+                if mode == "combined":
                     if current_pick_ref is None or place_ref is None:
                         print("当前未预测到足够点，按 r 重新预测。")
                         continue
                     arx.step_lift(13.5)
-                    current_pick_ref[2] += 0.02
-                    if cycle_idx == 0:
-                        current_pick_ref[2] -= 0.01
-                    if cycle_idx == 2:
-                        current_pick_ref[2] += 0.01
+                    current_pick_ref[2] += 0.015
                     execute_pick_place_cup_sequence(
                         arx=arx,
                         pick_ref=current_pick_ref,
@@ -405,6 +393,15 @@ def dual_cup_place_planning(
                     arx.step_lift(_place_height(cycle_idx))
                     if _place_height(cycle_idx) > 13.5:
                         time.sleep(1.0)
+                    if cycle_idx == 0:
+                        place_ref[0] += 0.01
+                        place_ref[1] -= 0.02
+                    if cycle_idx == 1:
+                        place_ref[0] += 0.01
+                        place_ref[1] += 0.02
+                    if cycle_idx == 2:
+                        place_ref[0] += 0.01
+                        place_ref[1] -= 0.01
                     execute_pick_place_cup_sequence(
                         arx=arx,
                         pick_ref=None,
@@ -415,25 +412,17 @@ def dual_cup_place_planning(
                         go_home=True,
                     )
                     cycle_idx += 1
-                    current_desc = None
-                    pick_prompt = None
-                    current_pick_uv = None
-                    current_pick_ref = None
-                    predicted_place_uv = None
-                    place_ref = None
-                    attachment_uvs = None
-                    place_prompt = None
-                    pick_color = None
-                    place_color = None
-                    use_queue_place = False
+                    reset_pick_state(clear_prompt=True)
+                    reset_place_state()
                     stage = "pick"
                     continue
 
-                if stage == "pick":
+                if mode == "pick":
                     if current_pick_ref is None:
                         print("当前未预测到 pick 点，按 r 重新预测。")
                         continue
                     arx.step_lift(13.5)
+                    current_pick_ref[2] += 0.015
                     execute_pick_place_cup_sequence(
                         arx=arx,
                         pick_ref=current_pick_ref,
@@ -445,14 +434,11 @@ def dual_cup_place_planning(
                     )
                     if current_desc:
                         picked_queue.append(current_desc)
-                    current_desc = None
-                    current_pick_uv = None
-                    current_pick_ref = None
-                    pick_color = None
+                    reset_pick_state(clear_prompt=False)
                     stage = "place"
                     continue
 
-                if stage == "place":
+                if mode == "place":
                     if place_ref is None:
                         print("当前未预测到 place 点，按 r 重新预测。")
                         continue
@@ -482,13 +468,8 @@ def dual_cup_place_planning(
                         queue_place_count += 1
 
                     cycle_idx += 1
-                    predicted_place_uv = None
-                    place_ref = None
-                    attachment_uvs = None
-                    place_prompt = None
-                    place_color = None
-                    use_queue_place = False
-                    pick_prompt = None
+                    reset_place_state()
+                    reset_pick_state(clear_prompt=True)
                     stage = "pick"
                     continue
 
