@@ -230,7 +230,7 @@ def main():
     #                       debug=True, depth_median_n=10)
     pick_prompt = "the cup on the left brown coaster"
     single_arm_pick_place(arx, reset_robot=False, pick_prompt=pick_prompt, place_prompt="",
-                          debug=True, depth_median_n=10)
+                          debug=True, depth_median_n=15)
 
 
 if __name__ == "__main__":

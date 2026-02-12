@@ -25,10 +25,23 @@ def main():
             arx_nav_robot.arx, goal="red cup", reset_robot=False, close_robot=False, no_last_place=True, single_test=True)
         # nav go
         arx_nav_robot.arx.step_lift(15.0)
-        action_return = arx_nav_robot.nav_plan(user_instruction)
+        # time.sleep(90.0)
+        # arx_nav_robot.arx.step_base(1.0, 0.0, 0.0, 10.0)
+        action_return = arx_nav_robot.go_follow_golden_path()
+        # arx_nav_robot.arx.step_lift(18.0)
+        # single_arm_pick_place(
+        #     arx_nav_robot.arx,
+        #     arm="right",
+        #     pick_prompt="the red cup",
+        #     place_prompt="",
+        #     reset_robot=False,
+        #     close_robot=False,
+        #     debug=True,
+        #     go_home=False,
+        # )
         # place empty cup to making area and pick the bubble tea
         arx_nav_robot.arx.step_lift(18.0)
-        time.sleep(1.5)
+        time.sleep(3.0)
         single_arm_pick_place(
             arx_nav_robot.arx,
             arm="right",
@@ -38,13 +51,12 @@ def main():
             close_robot=False,
             debug=True,
         )
-
-        time.sleep(20.0)
+        time.sleep(3.0)
         # pick bubble tea cup
         single_arm_pick_place(
             arx_nav_robot.arx,
             arm="left",
-            pick_prompt="the cup on the left brown coaster",
+            pick_prompt="the red cup on the left brown coaster",
             place_prompt="",
             reset_robot=False,
             close_robot=False,
@@ -52,12 +64,13 @@ def main():
             go_home=False,
         )
         # nav back
-        arx_nav_robot.back_origin_path()
-        # arx_nav_robot.back_origin_path(action_return)
-        # place the bubble tea cup to the customer area and insert a straw
-        arx_nav_robot.arx.step_lift(14.0)
+        arx_nav_robot.arx.step_lift(15.0)
+        arx_nav_robot.return_follow_reversed_path()
+        # arx_nav_robot.back_origin_path()
+        # # arx_nav_robot.back_origin_path(action_return)
+        # # place the bubble tea cup to the customer area and insert a straw
         dual_cup_straw(arx_nav_robot.arx, cup_side="left",
-                       close_robot=False, debug=True)
+                       close_robot=False)
     finally:
         arx_nav_robot.arx.close()
 

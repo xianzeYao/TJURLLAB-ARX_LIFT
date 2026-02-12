@@ -12,6 +12,20 @@ CLOSE = -2.2
 
 def dual_cup_straw(arx: ARXRobotEnv, cup_side="left", close_robot=True):
     try:
+        # arx.step_lift(14.0)
+        # single_arm_pick_place(
+        #     arx,
+        #     arm="left",
+        #     pick_prompt="the red cup",
+        #     place_prompt="",
+        #     reset_robot=False,
+        #     close_robot=False,
+        #     debug=True,
+        #     go_home=False,
+        # )
+        # arx.step_base(vx=0.0, vy=0.0, vz=-0.5, duration=10.3)
+        # arx.step_base(vx=0.5, vy=0.0, vz=0.0, duration=10.0)
+        # arx.step_base(vx=0.0, vy=0.0, vz=0.5, duration=10.3)
         arx.step_lift(16.0)
         straw_side = "right" if cup_side == "left" else "left"
         pick_straw_prompt = f"the top of the nearest black straw in the cup"
@@ -46,7 +60,7 @@ def dual_cup_straw(arx: ARXRobotEnv, cup_side="left", close_robot=True):
             item_type="straw",
             reset_robot=False,
             close_robot=False,
-            debug=False,
+            debug=True,
             go_home=False,
         )
         # 拿吸管的手回到初始位姿
@@ -62,13 +76,20 @@ def dual_cup_straw(arx: ARXRobotEnv, cup_side="left", close_robot=True):
             give_action = {cup_side: np.array(
                 [0.4, 0, 0.25, 0, 0, 0, CLOSE], dtype=np.float32)}
         arx.step(give_action)
-        time.sleep(5.0)
+        if cup_side == "left":
+            give2_action = {cup_side: np.array(
+                [0.4, 0, 0.2, 0, 0, 0, CLOSE], dtype=np.float32)}
+        else:
+            give2_action = {cup_side: np.array(
+                [0.4, 0, 0.2, 0, 0, 0, CLOSE], dtype=np.float32)}
+        arx.step(give2_action)
+        time.sleep(3.0)
         if cup_side == "left":
             open_action = {cup_side: np.array(
-                [0.4, 0, 0.25, 0, 0, 0, OPEN], dtype=np.float32)}
+                [0.4, 0, 0.2, 0, 0, 0, OPEN], dtype=np.float32)}
         else:
             open_action = {cup_side: np.array(
-                [0.4, 0, 0.25, 0, 0, 0, OPEN], dtype=np.float32)}
+                [0.4, 0, 0.2, 0, 0, 0, OPEN], dtype=np.float32)}
         arx.step(open_action)
     except Exception as e:
         print(f"An error occurred: {e}")

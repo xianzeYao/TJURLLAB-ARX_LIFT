@@ -22,11 +22,16 @@ class ARXRobotEnv():
                  max_a_xyz: float = 0.20, max_a_rpy: float = 1.00,
                  max_j_xyz: Optional[float] = None, max_j_rpy: Optional[float] = None,
                  camera_type: Literal["color", "depth", "all"] = "all", camera_view: Iterable[str] = ("camera_l", "camera_h", "camera_r"),
-                 dir: Optional[str] = None, img_size: Optional[Tuple[int, int]] = (224, 224)):
+                 dir: Optional[str] = None, video: bool = False, video_fps: float = 20.0,
+                 video_name: Optional[str] = None,
+                 img_size: Optional[Tuple[int, int]] = (224, 224)):
         super().__init__()
         self.camera_view = camera_view
         self.camera_type = camera_type
         self.dir = dir
+        self.video = video
+        self.video_fps = float(video_fps)
+        self.video_name = video_name
         self.img_size = img_size
         self.duration_per_step = duration_per_step
         self.min_steps = min_steps
@@ -118,6 +123,7 @@ class ARXRobotEnv():
         return obs, reward, is_done, info
 
     def get_observation(self, save_dir: Optional[str] = None,
+                        video: Optional[bool] = None,
                         include_arm: bool = True,
                         include_camera: bool = True,
                         include_base: bool = True) -> Dict[str, np.ndarray]:
@@ -125,10 +131,12 @@ class ARXRobotEnv():
         Fetch latest status/camera and pack into observation.
 
         save_dir: 默认 None 时沿用实例化时的 self.dir；显式传值覆盖；传入空串/False 可关闭保存。
+        video: 默认 None 时沿用实例化时的 self.video；True 保存视频，False 保存图片。
         """
         real_save_dir = self.dir if save_dir is None else save_dir
+        real_video = self.video if video is None else video
         camera_all, status_all = self.node.get_camera(
-            save_dir=real_save_dir, target_size=self.img_size, return_status=True)
+            save_dir=real_save_dir, target_size=self.img_size, save_video=real_video, return_status=True)
         obs = build_observation(
             camera_all, status_all,
             include_arm=include_arm,
@@ -292,7 +300,7 @@ class ARXRobotEnv():
         rclpy.init()
 
         self.node, self.executor, self.executor_thread = start_robot_io(
-            self.camera_type, self.camera_view)
+            self.camera_type, self.camera_view, self.video, self.video_fps, self.dir, self.img_size, self.video_name)
         if self.node and self.executor:
             return (True, None)
         erorr = []
@@ -344,6 +352,9 @@ def main():
         camera_type="all",
         camera_view=("camera_h",),
         dir="testdata",
+        video=True,
+        video_fps=30.0,
+        video_name="test",
         img_size=(640, 480)
     )
 

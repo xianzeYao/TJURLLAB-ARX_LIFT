@@ -20,7 +20,12 @@ from message_filters import Subscriber, ApproximateTimeSynchronizer
 
 
 class RobotIO(Node):
-    def __init__(self, camera_type: Literal["color", "depth", "all"] = "all", camera_view: Iterable[str] = ("camera_l", "camera_h")):
+    def __init__(self, camera_type: Literal["color", "depth", "all"] = "all",
+                 camera_view: Iterable[str] = ("camera_l", "camera_h"),
+                 save_video: bool = False, video_fps: float = 20.0,
+                 save_dir: Optional[str] = None,
+                 target_size: Optional[tuple[int, int]] = None,
+                 video_name: Optional[str] = None):
         super().__init__('robot_io')
         self.bridge = CvBridge() if CvBridge is not None else None
 
@@ -45,10 +50,20 @@ class RobotIO(Node):
 
         self.camera_type = camera_type  # color/depth/all
         self.camera_view = list(camera_view) if camera_view else []
+        self.default_save_video = bool(save_video)
+        self.video_fps = float(video_fps)
+        self.default_save_dir = os.fspath(save_dir) if save_dir else None
+        self.default_target_size = tuple(target_size) if target_size else None
+        self.video_name = str(video_name).strip() if video_name else None
+        self.continuous_video = bool(
+            self.default_save_video and self.default_save_dir)
+        self.video_writers: Dict[tuple[str, str], cv2.VideoWriter] = {}
+        self.video_shapes: Dict[tuple[str, str], tuple[int, int]] = {}
         self.cam_lock = threading.Lock()
         self.latest_images: Dict[str, Image] = {}
         self.subscribed_topics = []
-        self.save_queue: "queue.Queue[Optional[tuple]]" = queue.Queue()
+        self.save_queue: "queue.Queue[Optional[tuple[str, str, float, np.ndarray, bool]]]" = queue.Queue(
+        )
         self.saver_thread = threading.Thread(
             target=self._save_worker, daemon=True)
         self.saver_thread.start()
@@ -97,6 +112,19 @@ class RobotIO(Node):
         with self.cam_lock:
             for label, msg in zip(self.labels, msgs):
                 self.latest_images[label] = msg
+        if self.continuous_video and self.bridge is not None:
+            for label, msg in zip(self.labels, msgs):
+                img = self._decode_image_msg(
+                    label, msg, self.default_target_size)
+                if img is None:
+                    continue
+                stamp = getattr(msg, "header", None)
+                if stamp:
+                    ts = stamp.stamp.sec + stamp.stamp.nanosec * 1e-9
+                else:
+                    ts = time.time()
+                self.save_queue.put(
+                    (self.default_save_dir, label, ts, img, True))
 
     def send_base_msg(self, cmd: PosCmd):
         """Send base command."""
@@ -148,25 +176,21 @@ class RobotIO(Node):
             return status
 
     def get_camera(self, save_dir: Optional[str] = None, target_size: Optional[tuple[int, int]] = None,
+                   save_video: Optional[bool] = None,
                    return_status: bool = False):
         """Return latest approx-synced camera frames, optional status snapshot."""
         if self.bridge is None:
             print("CvBridge not initialized, cannot decode images.")
             return (dict(), self.status_snapshot) if return_status else dict()
+        save_as_video = self.default_save_video if save_video is None else bool(
+            save_video)
         frames = dict()
         with self.cam_lock:
             items = list(self.latest_images.items())
         for key, msg in items:
-            try:
-                img = self.bridge.imgmsg_to_cv2(
-                    msg, desired_encoding='passthrough')
-                if "depth" not in key:
-                    img = img[:, :, ::-1]
-            except Exception as exc:  # pragma: no cover
-                self.get_logger().warn(f"{key} decode failed: {exc}")
+            img = self._decode_image_msg(key, msg, target_size)
+            if img is None:
                 continue
-            if target_size:
-                img = cv2.resize(img, target_size)
             frames[key] = img
             if save_dir:
                 stamp = getattr(msg, "header", None)
@@ -174,7 +198,9 @@ class RobotIO(Node):
                     ts = stamp.stamp.sec + stamp.stamp.nanosec * 1e-9
                 else:
                     ts = time.time()
-                self.save_queue.put((save_dir, key, ts, img))
+                if not self._should_skip_on_demand_save(save_dir, save_as_video):
+                    self.save_queue.put(
+                        (save_dir, key, ts, img, save_as_video))
         if return_status:
             with self.status_lock:
                 # prefer snapshot if available; otherwise use latest
@@ -188,6 +214,28 @@ class RobotIO(Node):
             return frames, snap
         return frames
 
+    def _decode_image_msg(self, key: str, msg: Image, target_size: Optional[tuple[int, int]]) -> Optional[np.ndarray]:
+        try:
+            img = self.bridge.imgmsg_to_cv2(
+                msg, desired_encoding='passthrough')
+            if "depth" not in key:
+                img = img[:, :, ::-1]
+            if target_size:
+                img = cv2.resize(img, target_size)
+            return img
+        except Exception as exc:  # pragma: no cover
+            self.get_logger().warn(f"{key} decode failed: {exc}")
+            return None
+
+    def _should_skip_on_demand_save(self, save_dir: str, save_as_video: bool) -> bool:
+        # Continuous video mode already writes every callback frame.
+        if not save_as_video or not self.continuous_video:
+            return False
+        try:
+            return os.path.abspath(os.fspath(save_dir)) == os.path.abspath(self.default_save_dir)
+        except Exception:
+            return False
+
     def get_camera_keys(self):
         with self.cam_lock:
             return list(self.latest_images.keys())
@@ -196,26 +244,23 @@ class RobotIO(Node):
         while True:
             task = self.save_queue.get()
             if task is None:
+                self.save_queue.task_done()
                 break
-            save_dir, key, ts, img = task
+            save_dir, key, ts, img, save_video = task
             try:
                 os.makedirs(save_dir, exist_ok=True)
-                base = os.path.join(save_dir, f"{key}_{ts}")
-                if "depth" in key:
-                    np.save(base + ".npy", img)
-                    depth_float = img.astype(np.float32)
-                    finite = depth_float[np.isfinite(depth_float)]
-                    # if finite.size == 0:
-                    #     continue
-                    vmax = np.percentile(finite, 99)
-                    # if vmax <= 1e-6:
-                    #     continue
-                    vis = cv2.convertScaleAbs(depth_float, alpha=255.0 / vmax)
-                    cv2.imwrite(base + "_vis.png", vis,
-                                [cv2.IMWRITE_PNG_COMPRESSION, 0])
+                if save_video:
+                    self._save_video_frame(save_dir, key, img)
                 else:
-                    cv2.imwrite(base + ".png", img,
-                                [cv2.IMWRITE_JPEG_QUALITY, 90])
+                    base = os.path.join(save_dir, f"{key}_{ts}")
+                    if "depth" in key:
+                        np.save(base + ".npy", img)
+                        vis = self._depth_to_vis(img)
+                        cv2.imwrite(base + "_vis.png", vis,
+                                    [cv2.IMWRITE_PNG_COMPRESSION, 0])
+                    else:
+                        cv2.imwrite(base + ".png", img,
+                                    [cv2.IMWRITE_JPEG_QUALITY, 90])
             except Exception as exc:  # pragma: no cover
                 try:
                     self.get_logger().warn(f"save {key} failed: {exc}")
@@ -223,6 +268,65 @@ class RobotIO(Node):
                     pass
             finally:
                 self.save_queue.task_done()
+        self._release_video_writers()
+
+    @staticmethod
+    def _depth_to_vis(img: np.ndarray) -> np.ndarray:
+        depth_float = img.astype(np.float32, copy=False)
+        finite = depth_float[np.isfinite(depth_float)]
+        if finite.size == 0:
+            return np.zeros(depth_float.shape[:2], dtype=np.uint8)
+        vmax = float(np.percentile(finite, 99))
+        if vmax <= 1e-6:
+            return np.zeros(depth_float.shape[:2], dtype=np.uint8)
+        return cv2.convertScaleAbs(depth_float, alpha=255.0 / vmax)
+
+    def _prepare_video_frame(self, key: str, img: np.ndarray) -> np.ndarray:
+        if "depth" in key:
+            frame = self._depth_to_vis(img)
+        else:
+            frame = img
+        if frame.dtype != np.uint8:
+            frame = cv2.convertScaleAbs(frame)
+        if frame.ndim == 2:
+            frame = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
+        elif frame.ndim == 3 and frame.shape[2] == 1:
+            frame = cv2.cvtColor(frame[:, :, 0], cv2.COLOR_GRAY2BGR)
+        return frame
+
+    def _get_video_writer(self, save_dir: str, key: str, frame: np.ndarray) -> cv2.VideoWriter:
+        writer_key = (save_dir, key)
+        h, w = frame.shape[:2]
+        writer = self.video_writers.get(writer_key)
+        shape = self.video_shapes.get(writer_key)
+        if writer is not None and shape != (w, h):
+            writer.release()
+            writer = None
+        if writer is None:
+            filename = f"{self.video_name}_{key}.mp4" if self.video_name else f"{key}.mp4"
+            out_path = os.path.join(save_dir, filename)
+            fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+            writer = cv2.VideoWriter(
+                out_path, fourcc, self.video_fps, (w, h), True)
+            if not writer.isOpened():
+                raise RuntimeError(f"open video writer failed: {out_path}")
+            self.video_writers[writer_key] = writer
+            self.video_shapes[writer_key] = (w, h)
+        return writer
+
+    def _save_video_frame(self, save_dir: str, key: str, img: np.ndarray):
+        frame = self._prepare_video_frame(key, img)
+        writer = self._get_video_writer(save_dir, key, frame)
+        writer.write(frame)
+
+    def _release_video_writers(self):
+        for writer in self.video_writers.values():
+            try:
+                writer.release()
+            except Exception:
+                pass
+        self.video_writers.clear()
+        self.video_shapes.clear()
 
     def stop_saver(self):
         self.save_queue.put(None)
@@ -230,8 +334,20 @@ class RobotIO(Node):
             self.saver_thread.join(timeout=2.0)
 
 
-def start_robot_io(camera_type: Literal["color", "depth", "all"] = "all", camera_view: Iterable[str] = ("camera_l", "camera_h")):
-    node = RobotIO(camera_type=camera_type, camera_view=camera_view)
+def start_robot_io(camera_type: Literal["color", "depth", "all"] = "all",
+                   camera_view: Iterable[str] = ("camera_l", "camera_h"),
+                   save_video: bool = False,
+                   video_fps: float = 20.0,
+                   save_dir: Optional[str] = None,
+                   target_size: Optional[tuple[int, int]] = None,
+                   video_name: Optional[str] = None):
+    node = RobotIO(camera_type=camera_type,
+                   camera_view=camera_view,
+                   save_video=save_video,
+                   video_fps=video_fps,
+                   save_dir=save_dir,
+                   target_size=target_size,
+                   video_name=video_name)
     executor = SingleThreadedExecutor()
     executor.add_node(node)
     t = threading.Thread(target=executor.spin, daemon=True)

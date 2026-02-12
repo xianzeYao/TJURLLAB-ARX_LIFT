@@ -560,11 +560,11 @@ def dual_cup_place_planning(
                         place_ref[1] += 0.02
                         print(f"cycle_idx: {cycle_idx}:y加2cm")
                     if cycle_idx == 3:
-                        print(f"cycle_idx: {cycle_idx}:x减1cm")
-                        place_ref[0] -= 0.01
+                        print(f"cycle_idx: {cycle_idx}:x减0.5cm")
+                        place_ref[0] -= 0.005
                     if cycle_idx == 4:
-                        print(f"cycle_idx: {cycle_idx}:x减1cm")
-                        place_ref[0] -= 0.01
+                        print(f"cycle_idx: {cycle_idx}:x减0.5cm")
+                        place_ref[0] -= 0.005
                     if cycle_idx == 5:
                         print(f"cycle_idx: {cycle_idx}:x减去1cm")
                         place_ref[0] -= 0.01

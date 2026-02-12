@@ -3,6 +3,7 @@ from __future__ import annotations
 import sys
 import time
 import textwrap
+from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import cv2
@@ -85,6 +86,31 @@ def _arm_home_action(arm: str, open_gripper: bool = True) -> Dict[str, np.ndarra
     return {"left": active} if arm == "left" else {"right": active}
 
 
+def _build_points_only_vis(
+    color: np.ndarray,
+    pick_px: List[Tuple[int, int]],
+    place_px: List[Optional[Tuple[int, int]]],
+) -> np.ndarray:
+    disp = color.copy()
+    for i, p in enumerate(pick_px):
+        cv2.circle(disp, p, 3, (0, 0, 255), -1)
+        draw_text_lines(disp, [f"P{i+1}"], origin=(p[0] + 6, p[1] - 6))
+    for i, p in enumerate(place_px):
+        if p is None:
+            continue
+        cv2.circle(disp, p, 3, (255, 0, 0), -1)
+        draw_text_lines(disp, [f"C{i+1}"], origin=(p[0] + 6, p[1] - 6))
+    return disp
+
+
+def _save_points_vis(vis_img: np.ndarray, save_path: str) -> None:
+    out = Path(save_path)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    if not cv2.imwrite(str(out), vis_img):
+        raise RuntimeError(f"failed to save image: {out}")
+    print(f"预测点位图已保存: {out}")
+
+
 def dual_arm_pick_planning_parallel(
     arx: ARXRobotEnv,
     reset_robot: bool = True,
@@ -93,6 +119,8 @@ def dual_arm_pick_planning_parallel(
     goal: str = "red cup",
     go_home: bool = False,
     single_test: bool = False,
+    depth_median_n: int = 10,
+    dir: Optional[str] = None,
 ):
     try:
         if reset_robot:
@@ -184,14 +212,15 @@ def dual_arm_pick_planning_parallel(
             if color is None or depth is None:
                 cv2.waitKey(1)
                 continue
-            depths = [depth]
-            for _ in range(9):
-                frames = arx.node.get_camera(
-                    target_size=(640, 480), return_status=False)
-                d = frames.get("camera_h_aligned_depth_to_color")
-                if d is not None:
-                    depths.append(d)
-            depth = np.median(np.stack(depths, axis=0), axis=0)
+            if depth_median_n > 1:
+                depths = [depth]
+                for _ in range(depth_median_n - 1):
+                    frames = arx.node.get_camera(
+                        target_size=(640, 480), return_status=False)
+                    d = frames.get("camera_h_aligned_depth_to_color")
+                    if d is not None:
+                        depths.append(d)
+                depth = np.median(np.stack(depths, axis=0), axis=0)
 
             target_steps = plan_steps
             if plan_cups:
@@ -269,30 +298,32 @@ def dual_arm_pick_planning_parallel(
                 cv2.waitKey(1)
                 continue
 
-            disp = color.copy()
-            for i, p in enumerate(pick_px):
-                cv2.circle(disp, p, 3,  (0, 0, 255), -1)
-                draw_text_lines(disp, [f"P{i+1}"], origin=(p[0] + 6, p[1] - 6))
-            for i, p in enumerate(place_px):
-                if p is None:
-                    continue
-                cv2.circle(disp, p, 3,  (255, 0, 0), -1)
-                draw_text_lines(disp, [f"C{i+1}"], origin=(p[0] + 6, p[1] - 6))
+            disp_save = _build_points_only_vis(color, pick_px, place_px)
+            if dir:
+                try:
+                    _save_points_vis(disp_save, dir)
+                except Exception as exc:
+                    print(f"保存预测点位图失败: {exc}")
 
+            # 展示图保留 prompt 与说明；保存图不叠左上角 prompt。
+            disp_show = disp_save.copy()
+            prompt_lines_show = [f"{i+1}. {x}" for i,
+                                 x in enumerate(prompt_lines)]
             info_lines = [
                 f"Steps: {len(plan_steps)} | no_last_place={no_last_place}",
                 "Press 'r' to re-predict, 'e' to execute, 'q' to quit",
             ]
             draw_text_lines(
-                disp,
-                info_lines,
+                disp_show,
+                ["Point Prompt:"] + prompt_lines_show + info_lines,
                 origin=(10, 25),
                 line_height=20,
                 color=(0, 0, 255),
                 scale=0.55,
                 thickness=2,
             )
-            cv2.imshow(win, disp)
+            cv2.imshow(win, disp_show)
+            print("按 'r' 重预测，按 'e' 执行，按 'q' 退出")
 
             key = cv2.waitKey(0)
             if key == ord("r"):
@@ -408,9 +439,20 @@ def main():
         camera_type="all",
         camera_view=("camera_h",),
         img_size=(640, 480),
+        video=True,
+        video_fps=30.0,
+        dir="../Video4demo",
+        video_name="dual_cup_pick_planning_parallel_red",
     )
-    dual_arm_pick_planning_parallel(arx, close_robot=True, goal="red cup",
-                                    no_last_place=True, single_test=True)
+    dual_arm_pick_planning_parallel(
+        arx,
+        close_robot=True,
+        goal="red cup",
+        no_last_place=True,
+        single_test=True,
+        dir="../Video4demo/dual_cup_pick_planning_parallel_red.png",
+        depth_median_n=15,
+    )
 
 
 if __name__ == "__main__":
