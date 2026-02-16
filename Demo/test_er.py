@@ -1,13 +1,8 @@
 import cv2
 import numpy as np
-import rclpy
-from cv_bridge import CvBridge
-from sensor_msgs.msg import Image
 
 from arx_pointing import predict_multi_points_from_rgb, predict_point_from_rgb
 import sys
-sys.path.append("../ARX_Realenv/ROS2")  # noqa
-from arx_ros2_env import ARXRobotEnv  # noqa
 ## """Curren Goal is: pick the red cup. I need to pick up the cups from top to the red cup. What is the picking plan steps to finish the goal?""",
 ## """Curren Goal is: pick the purple cup. I need to pick up the cups from top to the purple cup. What is the picking plan steps to finish the goal?""",
 # """You are currently a robot performing robotic manipulation tasks. 
@@ -16,7 +11,7 @@ from arx_ros2_env import ARXRobotEnv  # noqa
 #         You must provide the points in the order of the trajectory, and the number of points must be 6."""
 # """Point out the coaster with the label of number 3 and the Purple cup"""
 def main():
-    color = cv2.imread("../Testdata4Mani/multicup3.png")
+    color = cv2.imread("../Testdata4Mani/point.png")
     points, message = predict_multi_points_from_rgb(
         image=color,
         text_prompt="",
